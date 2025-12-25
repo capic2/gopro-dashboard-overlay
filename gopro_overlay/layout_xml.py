@@ -30,7 +30,8 @@ from .widgets.gradient_bar import GradientBar
 from .widgets.map import MovingJourneyMap, Circuit
 from .widgets.profile import WidgetProfiler
 from .widgets.widgets import simple_icon, Translate, Composite, Frame, Widget
-
+from .widgets.custom_calc import CustomCalcWidget
+from .widgets.custom_raw import CustomRawWidget
 
 def load_xml_layout(filepath: Path):
     if filepath.exists():
@@ -700,9 +701,6 @@ class Widgets:
         "bar_width", "bar_height", "bar_max", "bar_rgb", "bar_bg"
     })
     def create_custom_calc(self, element: ET.Element, entry, **kwargs) -> Widget:
-        """Widget de calcul personnalisé configurable via XML."""
-        from .widgets.custom_calc import CustomCalcWidget
-
         return CustomCalcWidget(
             at=at(element),
             entry=entry,
@@ -722,6 +720,35 @@ class Widgets:
             bar_color=rgbattr(element, "bar_rgb", d=(0, 255, 100)),
             bar_bg=rgbattr(element, "bar_bg", d=(50, 50, 50)),
             timeseries=self.framemeta,  # ← CORRECTION : framemeta pas timeseries!
+        )
+
+    @allow_attributes({
+        "x", "y", "size", "field", "label", "unit", "dp",
+        "template", "align",
+        "rgb", "outline", "outline_width",
+        "bar_width", "bar_height", "bar_max", "bar_rgb", "bar_bg",
+        "default_value"
+    })
+    def create_custom_raw(self, element: ET.Element, entry, **kwargs) -> Widget:
+        return CustomRawWidget(
+            at=at(element),
+            entry=entry,
+            field=attrib(element, "field"),  # ✅ field au lieu de expression
+            font=self._font(element, "size", d=16),
+            label=attrib(element, "label", d=""),
+            unit=attrib(element, "unit", d=""),
+            dp=iattrib(element, "dp", d=1),
+            template=attrib(element, "template", d="text"),
+            align=attrib(element, "align", d="left"),
+            fill=rgbattr(element, "rgb", d=(255, 255, 255)),
+            stroke=rgbattr(element, "outline", d=(0, 0, 0)),
+            stroke_width=iattrib(element, "outline_width", d=2),
+            bar_width=iattrib(element, "bar_width", d=200),
+            bar_height=iattrib(element, "bar_height", d=20),
+            bar_max=iattrib(element, "bar_max", d=100),
+            bar_color=rgbattr(element, "bar_rgb", d=(0, 255, 100)),
+            bar_bg=rgbattr(element, "bar_bg", d=(50, 50, 50)),
+            default_value=float(attrib(element, "default_value", d="0")),  # ✅ Nouveau
         )
 
     @allow_attributes({"size", "metric", "units", "textsize", "green", "yellow", "end", "rotate", "outline"})

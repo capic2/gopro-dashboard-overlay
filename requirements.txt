@@ -14,3 +14,6 @@ progressbar2==4.2.0
 requests==2.31.0
 pycairo==1.23.0
 sqlitedict==2.1.0
+
+fitparse==1.2.0
+fit-tool==0.9.13

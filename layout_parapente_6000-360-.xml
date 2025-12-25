@@ -1,0 +1,86 @@
+<layout>
+    <!-- Zone de vue par défaut YouTube = Centre horizontal (x: 2200-3800),
+         Bande centrale verticale (y: 900-2100) -->
+
+    <!-- Date/heure en haut centre - visible par défaut -->
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" cache="false" size="64" x="2700" y="100"/>
+
+    <!-- Groupe gauche - Infos contextuelles -->
+    <composite x="300" y="1200" name="left_panel">
+        <!-- Carte -->
+        <translate x="0" y="0">
+            <frame width="500" height="500" cr="50">
+                <component type="journey_map" size="500" opacity="0.7"/>
+            </frame>
+            <component type="metric_unit" metric="odo" x="250" y="420" size="40" align="right">{:~P}</component>
+            <component type="metric" metric="odo" align="right" x="250" y="470" size="48"/>
+        </translate>
+
+        <!-- Deco/Attero -->
+        <composite x="0" y="550" name="deco_attero">
+            <component type="text" size="40">Deco (m)</component>
+            <component type="custom-calc" y="45" expression="state.setdefault('alt_start', alt)" dp="0" size="72"/>
+            <component type="text" y="140" size="40">Attero (m)</component>
+            <component type="custom-calc" y="190" expression="precalc.get('min_alt', 0)" dp="0" size="72"/>
+        </composite>
+    </composite>
+
+    <!-- Groupe droit - Données temps réel (vue principale) -->
+    <composite x="5200" y="1200" name="right_panel">
+        <!-- BPM -->
+        <composite x="0" y="0" name="bpm">
+            <component type="metric_unit" metric="hr" x="-180" y="0" size="40" align="right">{:~P}</component>
+            <component type="icon" x="-160" y="0" file="heartbeat.png" size="100"/>
+            <component type="metric" x="-180" y="50" metric="hr" dp="0" size="80" align="right"/>
+            <composite x="-260" y="150">
+                <composite x="-30" name="bpm_min">
+                    <component type="text" size="32" align="right">min</component>
+                    <component type="custom_calc" y="30" size="52" dp="0" expression="precalc.get('min_hr', 0)" align="right"/>
+                </composite>
+                <composite x="80" name="bpm_max">
+                    <component type="text" size="32" align="right">max</component>
+                    <component type="custom_calc" y="30" size="52" dp="0" expression="precalc.get('max_hr', 0)" align="right"/>
+                </composite>
+            </composite>
+        </composite>
+
+        <!-- Altitude -->
+        <composite x="0" y="280" name="alt">
+            <component type="metric_unit" metric="alt" x="-180" y="0" size="40" align="right">{:~P}</component>
+            <component type="icon" x="-160" y="0" file="mountain.png" size="100"/>
+            <component type="metric" metric="alt" x="-180" y="50" dp="0" size="80" align="right"/>
+            <composite x="-280" y="150">
+                <composite x="0" name="alt_min">
+                    <component type="text" size="32" align="right">min</component>
+                    <component type="custom_calc" y="30" size="52" dp="0" expression="precalc.get('min_alt', 0)" align="right"/>
+                </composite>
+                <composite x="110" name="alt_max">
+                    <component type="text" size="32" align="right">max</component>
+                    <component type="custom_calc" y="30" size="52" dp="0" expression="precalc.get('max_alt', 0)" align="right"/>
+                </composite>
+            </composite>
+        </composite>
+
+        <!-- Dénivelé -->
+        <composite x="0" y="560" name="deniv">
+            <component type="text" x="-180" size="40" align="right">m</component>
+            <component type="icon" x="-160" y="0" file="slope.png" size="100"/>
+            <component type="custom-calc" x="-180" y="50" expression="precalc.get('total_gain', 0)" label="D+" dp="0" size="80" align="right"/>
+            <component type="custom-calc" x="-180" y="150" expression="precalc.get('total_loss', 0)" label="D-" dp="0" size="80" align="right"/>
+        </composite>
+
+        <!-- Vario -->
+        <composite x="0" y="840" name="vario">
+            <component type="text" x="-180" size="40" align="right">m/s</component>
+            <component type="icon" x="-160" y="0" file="slope-triangle.png" size="100"/>
+            <component type="custom-calc" x="-180" y="50" dp="2" size="80" align="right" expression="(grad / 10) * (speed / 3.6)"/>
+        </composite>
+    </composite>
+
+    <!-- Vitesse en bas centre - Grosse jauge visible -->
+    <composite x="2550" y="2200" name="speed_center">
+        <component type="msi" metric="speed" textsize="42" needle="1" units="kph" size="480" end="80" yellow="80" green="80"/>
+        <component type="metric" metric="speed" units="kph" dp="0" size="108" x="240" y="360" align="centre"/>
+        <component type="metric_unit" metric="speed" units="kph" size="54" x="240" y="480" align="centre">{:~P}</component>
+    </composite>
+</layout>

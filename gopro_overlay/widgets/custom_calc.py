@@ -238,7 +238,7 @@ class CustomCalcWidget(Widget):
             'hr': safe_get('hr'),
             'cadence': safe_get('cad'),
             'power': safe_get('power'),
-            'temp': safe_get('atemp'),
+            'temp': safe_get('temp'),
             'grad': safe_get('grad') or safe_get('cgrad'),
             'dist': safe_get('dist'),
             'state': self.state,

@@ -62,12 +62,9 @@
 		<component type="custom-calc" x="-70" y="18" dp="2" size="32" align="right" expression="(grad / 10) * (speed / 3.6)"/>
 	</composite>
 
-	<!-- acceleration verticale -->
-	<composite x="1900" y="400" name="accelz">
-		<component type="metric_unit" metric="accl.z" x="-70" y="0" size="16" align="right">{:~P}</component>
-		<component type="icon" x="-64" y="0" file="slope-triangle.png" size="64"/>
-		<component type="metric" metric="accl.z" x="-70" y="18" dp="0" size="32" align="right" />
-	</composite>
+	<!--<composite x="1900" y="400" name="accelz">
+		<component type="custom-raw" field="accl_z" x="-70" y="18" dp="3" size="32" align="right" />
+	</composite>-->
   
 
 	<!-- carte -->

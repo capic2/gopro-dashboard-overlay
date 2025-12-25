@@ -1,0 +1,77 @@
+<layout>
+    <!-- date et heure -->
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" cache="false" size="64" x="20" y="20"/>
+
+    <!-- vitesse sol en km/h -->
+    <composite x="3470" y="1780" name="speed">
+       <component type="msi" metric="speed" textsize="28" needle="1" units="kph" size="320" end="80" yellow="80" green="80"/>
+       <component type="metric" metric="speed" units="kph" dp="0" size="72" x="160"  y="240" align="centre"/>
+       <component type="metric_unit" metric="speed" units="kph" size="36"  x="160"  y="320" align="centre">{:~P}</component>
+    </composite>
+
+    <!-- bpm -->
+    <composite x="3800" y="20" name="bpm">
+        <component type="metric_unit" metric="hr" x="-140" y="0" size="32" align="right">{:~P}</component>
+        <component type="icon" x="-128" y="0" file="heartbeat.png" size="80"/>
+        <component type="metric" x="-140" y="36" metric="hr" dp="0" size="64" align="right"/>
+       <composite x="-200" y="100">
+          <composite x="-20" name="bpm_min">
+             <component type="text" size="24" align="right">min</component>
+             <component type="custom_calc" y="20" size="36" dp="0"  expression="precalc.get('min_hr', 0)" align="right"/>
+          </composite>
+          <composite x="50" name="bpm_max">
+             <component type="text" size="24" align="right">max</component>
+             <component type="custom_calc" y="20" size="36" dp="0"  expression="precalc.get('max_hr', 0)" align="right"/>
+          </composite>
+       </composite>
+    </composite>
+
+    <!-- altitude -->
+    <composite x="3800" y="220" name="alt">
+       <component type="metric_unit" metric="alt" x="-140" y="0" size="32" align="right">{:~P}</component>
+       <component type="icon" x="-128" y="0" file="mountain.png" size="80"/>
+       <component type="metric" metric="alt" x="-140" y="36" dp="0" size="64" align="right" />
+       <composite x="-220" y="100">
+          <composite x="0" name="alt-min">
+             <component type="text" size="24" align="right">min</component>
+             <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('min_alt', 0)" align="right"/>
+          </composite>
+          <composite x="80" name="alt_max">
+             <component type="text" size="24" align="right">max</component>
+             <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('max_alt', 0)" align="right"/>
+          </composite>
+       </composite>
+    </composite>
+
+    <!-- dénivelé -->
+    <composite x="3800" y="420" name="deniv">
+       <component type="text" x="-140" size="32" align="right">m</component>
+       <component type="icon" x="-128" y="0" file="slope.png" size="80" />
+       <component type="custom-calc" x="-140" y="36" expression="precalc.get('total_gain', 0)" label="D+" dp="0" size="64" align="right" />
+       <component type="custom-calc" x="-140" y="100" expression="precalc.get('total_loss', 0)" label="D-" dp="0" size="64" align="right" />
+    </composite>
+
+    <composite x="3800" y="620" name="vario">
+       <component type="text" x="-140" size="32" align="right">m/s</component>
+       <component type="icon" x="-128" y="0" file="slope-triangle.png" size="80" />
+       <component type="custom-calc" x="-140" y="36" dp="2" size="64" align="right" expression="(grad / 10) * (speed / 3.6)"/>
+    </composite>
+
+    <!-- carte -->
+    <translate x="20" y="1700">
+       <frame  width="440" height="440" cr="40">
+          <component type="journey_map" size="440" opacity="0.7"  />
+       </frame>
+       <!-- distance -->
+       <component type="metric_unit" metric="odo" x="240" y="360" size="32" align="right">{:~P}</component>
+       <component type="metric" metric="odo"  align="right" x="240" y="400" size="40"/>
+    </translate>
+
+    <composite x="480" y="1700" name="deco/attero">
+       <component type="text" size="32">Deco (m)</component>
+       <component type="custom-calc" y="30" expression="state.setdefault('alt_start', alt)" dp="0" size="64" />
+
+       <component type="text" y="120" size="32">Attero (m)</component>
+        <component type="custom-calc" y="160" expression="precalc.get('min_alt', 0)" dp="0" size="64"  />
+    </composite>
+</layout>

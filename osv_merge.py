@@ -312,13 +312,13 @@ def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0):
 
 
 def generate_gpx(points, output_file):
-    """Génère le GPX fusionné avec extensions originales + OSV"""
+    """Génère le GPX fusionné avec extensions originales + OSV (préfixes ns)"""
 
     gpx = '''<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" 
      creator="OSV+GPX Merger"
      xmlns="http://www.topografix.com/GPX/1/1"
-     xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+     xmlns:ns1="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
      xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
     <trk>
@@ -333,7 +333,6 @@ def generate_gpx(points, output_file):
         ele = point.get('ele')
         time = point['time']
         g_force = point.get('g_force')
-        original_extensions = point.get('original_extensions')
 
         gpx += f'      <trkpt lat="{lat}" lon="{lon}">\n'
 
@@ -342,39 +341,43 @@ def generate_gpx(points, output_file):
 
         gpx += f'        <time>{time.isoformat()}</time>\n'
 
-        # Extensions : combiner originales + OSV
-        has_osv_data = (g_force is not None or point.get('accel_x') is not None)
+        # Extensions avec préfixes ns
+        gpx += '        <extensions>\n'
+        gpx += '          <ns1:TrackPointExtension>\n'
 
-        if original_extensions or has_osv_data:
-            gpx += '        <extensions>\n'
+        # Parser les extensions originales pour extraire hr, speed, cad
+        original_ext = point.get('original_extensions', '')
 
-            # ✅ 1. Insérer les extensions originales (si présentes)
-            if original_extensions:
-                # Nettoyer les balises <extensions> du XML original
-                ext_content = original_extensions.replace('<extensions>', '').replace('</extensions>', '').strip()
-                if ext_content:
-                    gpx += '          ' + ext_content + '\n'
+        # Extraire hr, speed, cad des extensions originales
+        import re
+        hr_match = re.search(r'<(?:ns\d+:)?hr>([^<]+)</(?:ns\d+:)?hr>', original_ext)
+        speed_match = re.search(r'<(?:ns\d+:)?speed>([^<]+)</(?:ns\d+:)?speed>', original_ext)
+        cad_match = re.search(r'<(?:ns\d+:)?cad>([^<]+)</(?:ns\d+:)?cad>', original_ext)
 
-            # ✅ 2. Ajouter les données OSV (si présentes)
-            if has_osv_data:
-                gpx += '          <gpxtpx:TrackPointExtension>\n'
+        # Ajouter les données Garmin avec préfixe ns1
+        if speed_match:
+            gpx += f'            <ns1:speed>{speed_match.group(1)}</ns1:speed>\n'
+        if cad_match:
+            gpx += f'            <ns1:cad>{cad_match.group(1)}</ns1:cad>\n'
+        if hr_match:
+            gpx += f'            <ns1:hr>{hr_match.group(1)}</ns1:hr>\n'
 
-                if g_force is not None:
-                    gpx += f'            <gpxtpx:gforce>{g_force:.4f}</gpxtpx:gforce>\n'
+        # Ajouter les données OSV avec préfixe ns1 aussi
+        if g_force is not None:
+            gpx += f'            <ns1:gforce>{g_force:.4f}</ns1:gforce>\n'
 
-                if point.get('accel_x') is not None:
-                    gpx += f'            <gpxtpx:accel.x>{point["accel_x"]:.4f}</gpxtpx:accel.x>\n'
-                    gpx += f'            <gpxtpx:accel.y>{point["accel_y"]:.4f}</gpxtpx:accel.y>\n'
-                    gpx += f'            <gpxtpx:accel.z>{point["accel_z"]:.4f}</gpxtpx:accel.z>\n'
+        if point.get('accel_x') is not None:
+            gpx += f'            <ns1:accl_x>{point["accel_x"]:.4f}</ns1:accl_x>\n'
+            gpx += f'            <ns1:accl_y>{point["accel_y"]:.4f}</ns1:accl_y>\n'
+            gpx += f'            <ns1:accl_z>{point["accel_z"]:.4f}</ns1:accl_z>\n'
 
-                if point.get('gyro_x') is not None:
-                    gpx += f'            <gpxtpx:gyro.x>{point["gyro_x"]:.4f}</gpxtpx:gyro.x>\n'
-                    gpx += f'            <gpxtpx:gyro.y>{point["gyro_y"]:.4f}</gpxtpx:gyro.y>\n'
-                    gpx += f'            <gpxtpx:gyro.z>{point["gyro_z"]:.4f}</gpxtpx:gyro.z>\n'
+        if point.get('gyro_x') is not None:
+            gpx += f'            <ns1:gyro_.x>{point["gyro_x"]:.4f}</ns1:gyro_.x>\n'
+            gpx += f'            <ns1:gyro_.y>{point["gyro_y"]:.4f}</ns1:gyro_.y>\n'
+            gpx += f'            <ns1:gyro_.z>{point["gyro_z"]:.4f}</ns1:gyro_.z>\n'
 
-                gpx += '          </gpxtpx:TrackPointExtension>\n'
-
-            gpx += '        </extensions>\n'
+        gpx += '          </ns1:TrackPointExtension>\n'
+        gpx += '        </extensions>\n'
 
         gpx += '      </trkpt>\n'
 
@@ -415,10 +418,10 @@ def generate_gpx_from_osv(points, output_file):
         # Extensions pour capteurs
         if g_force is not None or point.get('accel_x') is not None:
             gpx += '        <extensions>\n'
-            gpx += '          <gpxtpx:TrackPointExtension>\n'
+            gpx += '          <ns1:TrackPointExtension>\n'
 
             if g_force is not None:
-                gpx += f'            <gpxtpx:gforce>{float(g_force):.4f}</gpxtpx:gforce>\n'
+                gpx += f'            <ns1:gforce>{float(g_force):.4f}</ns1:gforce>\n'
 
             if point.get('accel_x') is not None:
                 # Convertir en float avant de formater
@@ -426,9 +429,9 @@ def generate_gpx_from_osv(points, output_file):
                 accel_y = float(point['accel_y'])
                 accel_z = float(point['accel_z'])
 
-                gpx += f'            <gpxtpx:accel.x>{accel_x:.4f}</gpxtpx:accel.x>\n'
-                gpx += f'            <gpxtpx:accel.y>{accel_y:.4f}</gpxtpx:accel.y>\n'
-                gpx += f'            <gpxtpx:accel.z>{accel_z:.4f}</gpxtpx:accel.z>\n'
+                gpx += f'            <ns1:accl_x>{accel_x:.4f}</ns1:accl_x>\n'
+                gpx += f'            <ns1:accl_y>{accel_y:.4f}</ns1:accl_y>\n'
+                gpx += f'            <ns1:accl_z>{accel_z:.4f}</ns1:accl_z>\n'
 
             if point.get('gyro_x') is not None:
                 # Convertir en float avant de formater
@@ -436,11 +439,11 @@ def generate_gpx_from_osv(points, output_file):
                 gyro_y = float(point['gyro_y'])
                 gyro_z = float(point['gyro_z'])
 
-                gpx += f'            <gpxtpx:gyro.x>{gyro_x:.4f}</gpxtpx:gyro.x>\n'
-                gpx += f'            <gpxtpx:gyro.y>{gyro_y:.4f}</gpxtpx:gyro.y>\n'
-                gpx += f'            <gpxtpx:gyro.z>{gyro_z:.4f}</gpxtpx:gyro.z>\n'
+                gpx += f'            <ns1:gyro_.x>{gyro_x:.4f}</ns1:gyro_.x>\n'
+                gpx += f'            <ns1:gyro_.y>{gyro_y:.4f}</ns1:gyro_.y>\n'
+                gpx += f'            <ns1:gyro_.z>{gyro_z:.4f}</ns1:gyro_.z>\n'
 
-            gpx += '          </gpxtpx:TrackPointExtension>\n'
+            gpx += '          </ns1:TrackPointExtension>\n'
             gpx += '        </extensions>\n'
 
         gpx += '      </trkpt>\n'
