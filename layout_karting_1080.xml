@@ -1,0 +1,135 @@
+<layout>
+    <composite x="20" y="200" name="lap_stats">
+    <frame width="250" height="100" cr="10" bg="0,0,0,180" outline="255,255,255,100"/>
+
+    <!-- Titre -->
+    <component type="text" x="125" y="10" size="16" align="centre">MEILLEUR TOUR</component>
+
+    <!-- Numéro de tour -->
+    <component type="custom_calc"
+               expression="int(precalc.get('best_lapnum', 0))"
+               x="125" y="35"
+               size="20"
+               dp="0"
+               align="centre"/>
+
+    <!-- Temps -->
+    <component type="custom_calc"
+               expression="precalc.get('best_lap_str', '-')"
+               x="125" y="60"
+               size="32"
+               align="centre"/>
+</composite>
+
+    <component type="lap_times_table"
+           x="30"
+           y="300"
+           width="280"
+           max_laps="8"
+           size="18"
+           show_best="true"/>
+
+
+<component type="lap_chronometer"
+           x="800"
+           y="50"
+           width="280"
+           height="100"
+           size="20"
+           show_lap_number="true"/>
+
+
+    <!-- Date -->
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="18" x="20" y="20"/>
+
+    <!-- ==================== INFO TOURS - Haut gauche ==================== -->
+    <composite x="20" y="60" name="lap_info">
+        <!-- Cadre semi-transparent -->
+        <frame width="280" height="100" cr="10" bg="0,0,0,180" outline="255,255,255"/>
+
+        <!-- "TOUR" + numéro -->
+        <composite x="15" y="20">
+            <component type="text" size="18" rgb="255,255,255,220">TOUR</component>
+            <component type="custom-calc" expression="int(lap) if laptype == 'TIMED' else laptype" size="48" x="90"
+                       y="-8" dp="0" align="left"/>
+        </composite>
+
+        <!-- Temps du tour -->
+        <composite x="15" y="65">
+            <component type="text" size="16" rgb="255,255,255,200">Temps:</component>
+            <component type="custom-calc" expression="laptime_str if laptype == 'TIMED' else '--'" size="28" x="85"
+                       y="-5" align="left"/>
+        </composite>
+    </composite>
+
+    <!-- ==================== VITESSE + RPM - Coin bas droite ==================== -->
+    <composite x="1650" y="600" name="speed_rpm_block">
+        <!-- Widget G-Force circulaire -->
+        <component type="gforce_circle"
+                   x="10"
+                   y="0"
+                   size="180"
+                   max_g="3"
+                   bg_colour="0,0,0,220"
+                   grid_colour="80,80,80,150"
+                   point_colour="255,50,50,255"
+                   line_colour="255,50,50,150"/>
+
+        <!-- VITESSE - Tachymètre OK, chiffre réduit -->
+        <composite x="0" y="180" name="speed_gauge">
+            <component type="msi" metric="speed" textsize="16" needle="1" units="kph"
+                       size="200" end="120" yellow="100" green="80"/>
+            <component type="metric" metric="calculated_gear" x="100" y="45" size="30" align="centre" dp="0"/>
+            <component type="metric" metric="speed" units="kph" dp="0" size="40"
+                       x="100" y="140" align="centre"/>
+            <component type="metric_unit" metric="speed" units="kph" size="18"
+                       x="100" y="178" align="centre">{:~P}
+            </component>
+        </composite>
+
+        <!-- ==================== STATS ==================== -->
+<!--        <composite x="0" y="350" name="stats">-->
+<!--            <component type="text" size="14">V MAX</component>-->
+<!--            <component type="custom_calc" y="18" size="32" dp="0"-->
+<!--                       expression="precalc.get('max_speed', 0)"/>-->
+<!--            <component type="text" y="56" size="12">km/h</component>-->
+<!--        </composite>-->
+
+        <component type="rpm_bar"
+                   x="15"
+                   y="400"
+                   width="400"
+                   height="50"
+                   segments="17"
+                   segment_width="8"
+                   segment_spacing="2"
+                   max_rpm="15000"
+                   size="20"
+                   show_label="true"/>
+    </composite>
+
+    <!-- ==================== TEMPÉRATURES ==================== -->
+    <composite x="1750" y="200" name="temps">
+        <!-- Eau -->
+        <component type="text" size="16" align="right">EAU</component>
+        <component type="metric" metric="temp" dp="1" size="36" y="20" align="right"/>
+        <component type="text" y="60" size="12" align="right">°C</component>
+
+        <!-- Échappement -->
+        <component type="text" y="90" size="16" align="right">ECHAPPEMENT</component>
+        <component type="metric" metric="exhaust_temp" dp="1" size="36" y="110" align="right"/>
+        <component type="text" y="150" size="12" align="right">°C</component>
+    </composite>
+
+    <!-- ==================== CARTE - Point mobile sans traces ==================== -->
+    <translate x="30" y="800">
+        <frame width="250" height="250" cr="15">
+            <component type="moving_map" size="250" rotate="false" />
+        </frame>
+
+        <component type="text" x="160" y="280" size="14" align="centre">DISTANCE</component>
+        <component type="metric" metric="odo" units="km" x="160" y="300" size="26" align="centre"/>
+    </translate>
+
+
+</layout>

@@ -19,6 +19,8 @@ units.define("number = []")
 # this is a hack to support "lat" and "lon" as a metric.
 units.define("location = []")
 
+# Trouve la section des unités et ajoute :
+# g_force = dimensionless  # Unité pour les accélérations en g
 
 def metres(n):
     return units.Quantity(n, units.m)

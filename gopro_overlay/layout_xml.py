@@ -29,9 +29,12 @@ from .widgets.gps import GPSLock
 from .widgets.gradient_bar import GradientBar
 from .widgets.map import MovingJourneyMap, Circuit
 from .widgets.profile import WidgetProfiler
+from .widgets.rpm_bar import RPMBarWidget
 from .widgets.widgets import simple_icon, Translate, Composite, Frame, Widget
 from .widgets.custom_calc import CustomCalcWidget
-from .widgets.custom_raw import CustomRawWidget
+from .widgets.gforce import GForceCircle
+from .widgets.lap_times_table import LapTimesTable
+from .widgets.lap_chronometer import LapChronometer
 
 def load_xml_layout(filepath: Path):
     if filepath.exists():
@@ -79,6 +82,7 @@ class Converters:
 
             "temp": lambda u: u.to(temperature_unit),
             "temperature": lambda u: u.to(temperature_unit),
+            "exhaust_temp": lambda u: u.to(temperature_unit),
 
             # accel
             "G": lambda u: u.to("gravity"),
@@ -280,6 +284,7 @@ def metric_accessor_from(name: str) -> Callable[[Entry], Optional[pint.Quantity]
         "cspeed": lambda e: e.cspeed,
         "accel": lambda e: e.accel,
         "temp": lambda e: e.atemp,
+        "exhaust_temp": lambda e: e.exhaust_temp,
         "gradient": lambda e: e.grad if e.grad is not None else e.cgrad,
         "cgrad": lambda e: e.cgrad,
         "alt": lambda e: e.alt,
@@ -288,6 +293,10 @@ def metric_accessor_from(name: str) -> Callable[[Entry], Optional[pint.Quantity]
         "dist": lambda e: e.dist,
         "azi": lambda e: e.azi,
         "cog": lambda e: e.cog,
+        "lap": lambda e: e.lap,
+        "laptime": lambda e: e.laptime,
+        "laptime_str": lambda e: e.laptime_str,
+        "laptype": lambda e: e.laptype,
 
         "gps-dop": lambda e: e.dop,
         "timestamp": lambda e: e.timestamp,
@@ -311,6 +320,7 @@ def metric_accessor_from(name: str) -> Callable[[Entry], Optional[pint.Quantity]
         "lat": lambda e: units.Quantity(e.point.lat, units.location),
         "lon": lambda e: units.Quantity(e.point.lon, units.location),
         "sdps": lambda e: e.sdps, # Vaaka cadence sensor distance-per-stroke field
+        "calculated_gear": lambda e: e.calculated_gear
     }
     if name in accessors:
         return accessors[name]
@@ -722,35 +732,6 @@ class Widgets:
             timeseries=self.framemeta,  # ← CORRECTION : framemeta pas timeseries!
         )
 
-    @allow_attributes({
-        "x", "y", "size", "field", "label", "unit", "dp",
-        "template", "align",
-        "rgb", "outline", "outline_width",
-        "bar_width", "bar_height", "bar_max", "bar_rgb", "bar_bg",
-        "default_value"
-    })
-    def create_custom_raw(self, element: ET.Element, entry, **kwargs) -> Widget:
-        return CustomRawWidget(
-            at=at(element),
-            entry=entry,
-            field=attrib(element, "field"),  # ✅ field au lieu de expression
-            font=self._font(element, "size", d=16),
-            label=attrib(element, "label", d=""),
-            unit=attrib(element, "unit", d=""),
-            dp=iattrib(element, "dp", d=1),
-            template=attrib(element, "template", d="text"),
-            align=attrib(element, "align", d="left"),
-            fill=rgbattr(element, "rgb", d=(255, 255, 255)),
-            stroke=rgbattr(element, "outline", d=(0, 0, 0)),
-            stroke_width=iattrib(element, "outline_width", d=2),
-            bar_width=iattrib(element, "bar_width", d=200),
-            bar_height=iattrib(element, "bar_height", d=20),
-            bar_max=iattrib(element, "bar_max", d=100),
-            bar_color=rgbattr(element, "bar_rgb", d=(0, 255, 100)),
-            bar_bg=rgbattr(element, "bar_bg", d=(50, 50, 50)),
-            default_value=float(attrib(element, "default_value", d="0")),  # ✅ Nouveau
-        )
-
     @allow_attributes({"size", "metric", "units", "textsize", "green", "yellow", "end", "rotate", "outline"})
     def create_msi2(self, element: ET.Element, entry, **kwargs) -> Widget:
         return MotorspeedIndicator2(
@@ -804,3 +785,57 @@ class Widgets:
 
     def create_cairo_gauge_donut(self, element, entry: ET.Element, **kwargs):
         return self.with_cairo(lambda m: m.create_cairo_gauge_donut(element, entry, self.converters, **kwargs))
+
+    @allow_attributes({"x", "y", "size", "max_g", "bg_colour", "grid_colour", "point_colour", "line_colour"})
+    def create_gforce_circle(self, element: ET.Element, entry, **kwargs) -> Widget:
+        return GForceCircle(
+            at=at(element),
+            entry=entry,
+            font=self._font(element, "textsize", d=12),
+            size=iattrib(element, "size", d=300),
+            max_g=float(attrib(element, "max_g", d="3")),
+            bg_colour=rgbattr(element, "bg_colour", d=(0, 0, 0, 220)),
+            grid_colour=rgbattr(element, "grid_colour", d=(80, 80, 80, 150)),
+            point_colour=rgbattr(element, "point_colour", d=(255, 50, 50, 255)),
+            line_colour=rgbattr(element, "line_colour", d=(255, 50, 50, 150))
+        )
+
+    @allow_attributes(
+        {"x", "y", "width", "height", "segments", "max_rpm", "size", "show_value", "show_label", "segment_width",
+         "segment_spacing"})
+    def create_rpm_bar(self, element: ET.Element, entry, **kwargs) -> Widget:
+        return RPMBarWidget(
+            at=at(element),
+            entry=entry,
+            width=iattrib(element, "width", d=300),
+            height=iattrib(element, "height", d=50),  # ✅ Changé de 40 à 50
+            segments=iattrib(element, "segments", d=24),  # ✅ Changé de 20 à 24
+            max_rpm=iattrib(element, "max_rpm", d=15000),
+            font=self._font(element, "size", d=16),
+            show_value=battrib(element, "show_value", d=True),  # ✅ battrib au lieu de iattrib
+            show_label=battrib(element, "show_label", d=True),  # ✅ battrib au lieu de iattrib
+            segment_width=iattrib(element, "segment_width", d=8),  # ✅ AJOUTÉ
+            segment_spacing=iattrib(element, "segment_spacing", d=2),  # ✅ AJOUTÉ
+        )
+
+    @allow_attributes({"x", "y", "width", "max_laps", "size", "show_best"})
+    def create_lap_times_table(self, element: ET.Element, entry, **kwargs) -> Widget:
+        return LapTimesTable(
+            at=at(element),
+            entry=entry,
+            font=self._font(element, "size", d=16),
+            width=iattrib(element, "width", d=300),
+            max_laps_visible=iattrib(element, "max_laps", d=10),
+            show_best=battrib(element, "show_best", d=True),
+        )
+
+    @allow_attributes({"x", "y", "width", "height", "size", "show_lap_number"})
+    def create_lap_chronometer(self, element: ET.Element, entry, **kwargs) -> Widget:
+        return LapChronometer(
+            at=at(element),
+            entry=entry,
+            font=self._font(element, "size", d=16),
+            width=iattrib(element, "width", d=280),
+            height=iattrib(element, "height", d=100),
+            show_lap_number=battrib(element, "show_lap_number", d=True),
+        )

@@ -17,3 +17,4 @@ sqlitedict==2.1.0
 
 fitparse==1.2.0
 fit-tool==0.9.13
+gpxpy==1.6.2
