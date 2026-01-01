@@ -7,6 +7,9 @@ from gopro_overlay.widgets.widgets import Widget
 class LapTimesTable(Widget):
     """
     Widget tableau des temps de tour qui s'affiche progressivement
+    Le meilleur tour reste toujours affiché même en dehors de la fenêtre
+    Les tours s'affichent seulement quand ils sont terminés
+    Affiche la vitesse max atteinte pendant chaque tour
     """
 
     def __init__(
@@ -14,9 +17,10 @@ class LapTimesTable(Widget):
             at: Coordinate,
             entry: Callable,
             font: Any,
-            width: int = 300,
+            width: int = 380,
             max_laps_visible: int = 10,
             show_best: bool = True,
+            show_max_speed: bool = True,
             bg_colour=(0, 0, 0, 200),
             text_colour=(255, 255, 255),
             best_colour=(50, 255, 50),
@@ -28,6 +32,7 @@ class LapTimesTable(Widget):
         self.width = width
         self.max_laps_visible = max_laps_visible
         self.show_best = show_best
+        self.show_max_speed = show_max_speed
         self.bg_colour = bg_colour
         self.text_colour = text_colour
         self.best_colour = best_colour
@@ -36,6 +41,13 @@ class LapTimesTable(Widget):
         # Cache pour stocker les temps de tour vus
         self.lap_times_cache = {}
         self.best_lap = None
+
+        # Mémoriser le tour précédent
+        self.last_lap = -1
+        self.pending_lap_data = None
+
+        # Dictionnaire pour tracker la vitesse max de chaque tour
+        self.lap_max_speeds = {}
 
     def draw(self, image: Image, draw):
         e = self.entry()
@@ -80,18 +92,51 @@ class LapTimesTable(Widget):
         except:
             laptype = 'UNKNOWN'
 
-        # Mettre à jour le cache des tours complétés
-        if current_lap is not None and laptime is not None and laptime_str is not None:
-            # Stocker le temps du tour actuel dans le cache
-            # Le temps affiché correspond au tour dont on affiche le numéro
-            if current_lap > 0:  # Ignorer out-lap (tour 0)
-                # Mise à jour uniquement si le tour n'est pas déjà dans le cache
-                if current_lap not in self.lap_times_cache:
-                    self.lap_times_cache[current_lap] = {
-                        'time': laptime,
-                        'str': laptime_str,
-                        'type': laptype
-                    }
+        # ✅ Récupérer la vitesse et convertir m/s → km/h
+        try:
+            speed_raw = getattr(e, 'speed', 0)
+
+            if hasattr(speed_raw, 'magnitude'):
+                speed_value = float(speed_raw.magnitude)
+                # ✅ CONVERSION m/s → km/h
+                speed_value = speed_value * 3.6
+            else:
+                speed_value = float(speed_raw) if speed_raw else 0
+
+        except Exception as ex:
+            speed_value = 0
+
+        # Mettre à jour la vitesse max du tour ACTUEL
+        if current_lap > 0:
+            if current_lap not in self.lap_max_speeds:
+                self.lap_max_speeds[current_lap] = speed_value
+            else:
+                if speed_value > self.lap_max_speeds[current_lap]:
+                    self.lap_max_speeds[current_lap] = speed_value
+
+        # Détecter changement de tour
+        if current_lap != self.last_lap:
+            # On vient de changer de tour
+            if self.last_lap > 0 and self.pending_lap_data is not None:
+                # Récupérer la vitesse max du tour qui vient de se terminer
+                max_speed_for_last_lap = self.lap_max_speeds.get(self.last_lap, 0)
+                self.pending_lap_data['max_speed'] = max_speed_for_last_lap
+
+                # Ajouter le tour au cache
+                self.lap_times_cache[self.last_lap] = self.pending_lap_data
+
+            # Réinitialiser pour le nouveau tour
+            self.last_lap = current_lap
+            self.pending_lap_data = None
+
+        # Stocker les données du tour en cours
+        if current_lap > 0 and laptime is not None and laptime_str is not None:
+            self.pending_lap_data = {
+                'time': laptime,
+                'str': laptime_str,
+                'type': laptype,
+                'max_speed': 0
+            }
 
         # Calculer le meilleur tour (tours chronométrés seulement)
         timed_laps = {num: data for num, data in self.lap_times_cache.items()
@@ -100,24 +145,32 @@ class LapTimesTable(Widget):
             best_lap_num = min(timed_laps, key=lambda x: timed_laps[x]['time'])
             self.best_lap = best_lap_num
 
+        # Sélection intelligente des tours à afficher
+        all_laps = sorted(self.lap_times_cache.keys())
+
+        if len(all_laps) <= self.max_laps_visible:
+            visible_laps = all_laps
+        else:
+            last_laps = all_laps[-self.max_laps_visible:]
+
+            if self.best_lap is not None and self.best_lap not in last_laps:
+                visible_laps = sorted([self.best_lap] + last_laps[-(self.max_laps_visible - 1):])
+            else:
+                visible_laps = last_laps
+
+        num_rows = len(visible_laps)
+
+        if num_rows == 0:
+            return
+
         # Position de base
         base_x = self.at.x
         base_y = self.at.y
-
-        # Récupérer le vrai ImageDraw
-        real_draw = draw.draw if hasattr(draw, 'draw') else ImageDraw.Draw(image)
 
         # Calculer dimensions
         row_height = 30
         header_height = 35
         padding = 10
-
-        # Limiter aux N derniers tours
-        visible_laps = sorted(self.lap_times_cache.keys())[-self.max_laps_visible:]
-        num_rows = len(visible_laps)
-
-        if num_rows == 0:
-            return  # Rien à afficher
 
         table_height = header_height + (num_rows * row_height) + (padding * 2)
 
@@ -141,12 +194,21 @@ class LapTimesTable(Widget):
         )
 
         draw.text(
-            (base_x + self.width - padding, header_y),
+            (base_x + self.width // 2 - 10, header_y),
             "TEMPS",
             font=self.font,
             fill=self.header_colour,
-            anchor="ra"
+            anchor="ma"
         )
+
+        if self.show_max_speed:
+            draw.text(
+                (base_x + self.width - padding, header_y),
+                "V MAX",
+                font=self.font,
+                fill=self.header_colour,
+                anchor="ra"
+            )
 
         # Ligne de séparation
         sep_y = header_y + 25
@@ -175,23 +237,35 @@ class LapTimesTable(Widget):
                 fill=color
             )
 
-            # Temps
-            time_text = lap_data['str']
-            draw.text(
-                (base_x + self.width - padding - 10, current_y),
-                time_text,
-                font=self.font,
-                fill=color,
-                anchor="ra"
-            )
-
-            # Indicateur best lap
+            # Indicateur best lap (étoile)
             if lap_num == self.best_lap and self.show_best:
                 draw.text(
-                    (base_x + padding + 50, current_y),
+                    (base_x + padding + 40, current_y),
                     "*",
                     font=self.font,
                     fill=self.best_colour
+                )
+
+            # Temps (centré)
+            time_text = lap_data['str']
+            draw.text(
+                (base_x + self.width // 2 - 10, current_y),
+                time_text,
+                font=self.font,
+                fill=color,
+                anchor="ma"
+            )
+
+            # Vitesse max (à droite)
+            if self.show_max_speed:
+                max_speed = lap_data.get('max_speed', 0)
+                speed_text = f"{max_speed:.0f}"
+                draw.text(
+                    (base_x + self.width - padding - 10, current_y),
+                    speed_text,
+                    font=self.font,
+                    fill=color,
+                    anchor="ra"
                 )
 
             current_y += row_height

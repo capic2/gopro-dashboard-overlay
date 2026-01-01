@@ -818,15 +818,16 @@ class Widgets:
             segment_spacing=iattrib(element, "segment_spacing", d=2),  # ✅ AJOUTÉ
         )
 
-    @allow_attributes({"x", "y", "width", "max_laps", "size", "show_best"})
+    @allow_attributes({"x", "y", "width", "max_laps", "size", "show_best", "show_max_speed"})
     def create_lap_times_table(self, element: ET.Element, entry, **kwargs) -> Widget:
         return LapTimesTable(
             at=at(element),
             entry=entry,
             font=self._font(element, "size", d=16),
-            width=iattrib(element, "width", d=300),
+            width=iattrib(element, "width", d=380),
             max_laps_visible=iattrib(element, "max_laps", d=10),
             show_best=battrib(element, "show_best", d=True),
+            show_max_speed=battrib(element, "show_max_speed", d=True),  # ✅ Ajouté
         )
 
     @allow_attributes({"x", "y", "width", "height", "size", "show_lap_number"})
@@ -835,6 +836,7 @@ class Widgets:
             at=at(element),
             entry=entry,
             font=self._font(element, "size", d=16),
+            timeseries=self.framemeta,
             width=iattrib(element, "width", d=280),
             height=iattrib(element, "height", d=100),
             show_lap_number=battrib(element, "show_lap_number", d=True),

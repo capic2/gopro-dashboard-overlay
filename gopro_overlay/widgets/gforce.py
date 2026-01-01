@@ -46,19 +46,28 @@ class GForceCircle(Widget):
         except:
             return 0
 
+    def _estimate_text_size(self, text, font):
+        """Estime la taille du texte basée sur la police"""
+        # Approximation : largeur ~ nb_chars * font_size * 0.6, hauteur ~ font_size
+        if hasattr(font, 'size'):
+            font_size = font.size
+        else:
+            font_size = 14  # Défaut
+
+        width = len(text) * font_size * 0.6
+        height = font_size
+        return int(width), int(height)
+
     def draw(self, image: Image, draw):
         # Récupère les accélérations
         accl_x = self._get_accl_value('x')  # Latéral
         accl_y = self._get_accl_value('y')  # Longitudinal
 
-        # ✅ Utiliser self.at comme RPMBarWidget
+        # Utiliser self.at
         x_base = self.at.x
         y_base = self.at.y
         center_x = x_base + self.center
         center_y = y_base + self.center
-
-        # ✅ Récupérer le vrai ImageDraw pour textbbox
-        real_draw = draw.draw if hasattr(draw, 'draw') else ImageDraw.Draw(image)
 
         # Cercles concentriques avec labels (0.5g, 1g, 1.5g, 2g, 2.5g)
         g_values = [0.5, 1.0, 1.5, 2.0, 2.5]
@@ -87,14 +96,14 @@ class GForceCircle(Widget):
             label_x = center_x + radius * math.cos(angle)
             label_y = center_y - radius * math.sin(angle)
 
-            # ✅ Utiliser real_draw pour textbbox
-            bbox = real_draw.textbbox((label_x, label_y), label_text, font=self.font, anchor="mm")
-            padding = 3
+            # ✅ Estimer la taille du texte
+            text_width, text_height = self._estimate_text_size(label_text, self.font)
+            padding = 4
 
-            # Rectangle de fond
+            # Rectangle de fond centré sur le label
             draw.rectangle(
-                ((bbox[0] - padding, bbox[1] - padding),
-                 (bbox[2] + padding, bbox[3] + padding)),
+                ((int(label_x - text_width // 2 - padding), int(label_y - text_height // 2 - padding)),
+                 (int(label_x + text_width // 2 + padding), int(label_y + text_height // 2 + padding))),
                 fill=(0, 0, 0, 180)
             )
 

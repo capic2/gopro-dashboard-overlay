@@ -6,7 +6,7 @@ from gopro_overlay.widgets.widgets import Widget
 
 class LapChronometer(Widget):
     """
-    Widget chronomètre simple : affiche uniquement le temps du tour en cours
+    Widget chronomètre simple : affiche le temps du tour en cours + numéro/total
     """
 
     def __init__(
@@ -14,6 +14,7 @@ class LapChronometer(Widget):
             at: Coordinate,
             entry: Callable,
             font: Any,
+            timeseries=None,
             width: int = 280,
             height: int = 100,
             show_lap_number: bool = True,
@@ -33,6 +34,46 @@ class LapChronometer(Widget):
         self.start_time = None
         self.beacon_markers = {}
         self.last_lap = -1
+
+        # ✅ Comptage des tours
+        self.total_timed_laps = 0
+        self.highest_timed_lap_seen = 0  # Plus haut numéro de tour TIMED vu
+        self.seen_laps = {}  # {lap_number: laptype}
+
+        # PRÉ-CALCULER si timeseries disponible
+        if timeseries:
+            print("🔍 Pré-calcul du nombre total de tours...")
+            for entry in timeseries.items():
+                try:
+                    lap = getattr(entry, 'lap', None)
+                    if lap and hasattr(lap, 'magnitude'):
+                        lap = int(lap.magnitude)
+                    elif lap is not None:
+                        lap = int(lap)
+                    else:
+                        continue
+
+                    laptype = getattr(entry, 'laptype', None)
+                    if laptype and hasattr(laptype, 'magnitude'):
+                        laptype = str(laptype.magnitude)
+                    elif laptype:
+                        laptype = str(laptype)
+                    else:
+                        continue
+
+                    # Stocker tous les tours avec leur type
+                    if lap not in self.seen_laps:
+                        self.seen_laps[lap] = laptype
+                        if laptype == 'TIMED':
+                            self.total_timed_laps += 1
+                            if lap > self.highest_timed_lap_seen:
+                                self.highest_timed_lap_seen = lap
+                except:
+                    continue
+
+            print(f"✅ Total de tours chronométrés : {self.total_timed_laps}")
+        else:
+            print("⚠️ timeseries non disponible, calcul dynamique activé")
 
     def _format_time(self, seconds):
         """Formate un temps en secondes en M:SS.mmm"""
@@ -75,6 +116,17 @@ class LapChronometer(Widget):
         except:
             laptype = 'UNKNOWN'
 
+        # ✅ Calcul dynamique si pré-calcul pas disponible
+        if self.total_timed_laps == 0:
+            if current_lap not in self.seen_laps:
+                self.seen_laps[current_lap] = laptype
+                if laptype == 'TIMED':
+                    self.total_timed_laps = max(self.total_timed_laps, current_lap - 1)
+            else:
+                # Mise à jour du total en fonction du plus haut tour TIMED vu
+                if laptype == 'TIMED':
+                    self.total_timed_laps = max(self.total_timed_laps, current_lap - 1)
+
         # Détecter changement de tour
         if current_lap != self.last_lap:
             if current_lap not in self.beacon_markers:
@@ -91,18 +143,6 @@ class LapChronometer(Widget):
         base_x = self.at.x
         base_y = self.at.y
 
-        # Récupérer le vrai ImageDraw
-        real_draw = draw.draw if hasattr(draw, 'draw') else ImageDraw.Draw(image)
-
-        # Fond
-        draw.rectangle(
-            ((base_x, base_y),
-             (base_x + self.width, base_y + self.height)),
-            fill=self.bg_colour,
-            outline=(100, 100, 100),
-            width=2
-        )
-
         # Polices
         try:
             chrono_font = ImageFont.truetype(self.font.path, size=int(self.font.size * 2.5))
@@ -113,14 +153,20 @@ class LapChronometer(Widget):
 
         current_y = base_y + 8
 
-        # Numéro de tour (petit, en haut)
+        # Numéro de tour avec total
         if self.show_lap_number:
             if laptype == 'OUT':
-                lap_text = "OUT LAP"
+                lap_text = "TOUR DE SORTIE"
             elif laptype == 'IN':
-                lap_text = "IN LAP"
+                lap_text = "TOUR DE RENTRÉE"
             else:
-                lap_text = f"TOUR {current_lap}"
+                timed_lap_number = current_lap
+
+                if self.total_timed_laps > 0:
+                    lap_text = f"TOUR {timed_lap_number}/{self.total_timed_laps}"
+                else:
+                    # Fallback si total pas encore calculé
+                    lap_text = f"TOUR {timed_lap_number}"
 
             draw.text(
                 (base_x + self.width // 2, current_y),
@@ -129,7 +175,7 @@ class LapChronometer(Widget):
                 fill=(180, 180, 180),
                 anchor="ma"
             )
-            current_y += 20
+            current_y += 5
 
         # Chrono (GROS, centré)
         time_text = self._format_time(elapsed_time)
