@@ -12,7 +12,7 @@ from .timeseries import Timeseries, Entry
 from gopro_overlay.point import PintPoint3
 
 # Ajoute accl_x, accl_y, accl_z au namedtuple
-GPX = collections.namedtuple("GPX", "time lat lon alt hr cad atemp exhaust_temp power speed accl_x accl_y accl_z calculated_gear lap laptime laptime_str laptype")
+GPX = collections.namedtuple("GPX", "time lat lon alt hr cad atemp exhaust_temp power speed accl_x accl_y accl_z calculated_gear lap laptime laptime_str laptype vspeed")
 
 
 def fudge(gpx):
@@ -37,7 +37,8 @@ def fudge(gpx):
                     "lap": None,
                     "laptime": None,
                     "laptime_str": None,
-                    "laptype": None
+                    "laptype": None,
+                    "vspeed": None
                 }
 
                 for extension in point.extensions:
@@ -75,6 +76,8 @@ def fudge(gpx):
                             data["laptime_str"] = child.text
                         elif tag == "laptype":
                             data["laptype"] = str(child.text)
+                        elif tag == "vspeed":
+                            data["vspeed"] = float(child.text)
 
                 yield GPX(**data)
 
@@ -99,7 +102,9 @@ def with_unit(gpx, units):
         units.Quantity(gpx.lap, units.dimensionless) if gpx.lap is not None else None,
         units.Quantity(gpx.laptime, units.dimensionless) if gpx.laptime is not None else None,
         units.Quantity(gpx.laptime_str, units.dimensionless) if gpx.laptime_str is not None else None,
-        units.Quantity(gpx.laptype, units.dimensionless) if gpx.laptype is not None else None
+        units.Quantity(gpx.laptype, units.dimensionless) if gpx.laptype is not None else None,
+        units.Quantity(gpx.vspeed, units.mps) if gpx.vspeed is not None else None
+
     )
 
 
@@ -144,7 +149,8 @@ def gpx_to_timeseries(gpx: List[GPX], units):
             lap=point.lap,
             laptime=point.laptime,
             laptime_str=point.laptime_str,
-            laptype=point.laptype
+            laptype=point.laptype,
+            vspeed = point.vspeed
         )
         for index, point in enumerate(gpx)
     ]

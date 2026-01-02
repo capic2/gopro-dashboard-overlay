@@ -119,6 +119,13 @@ class CustomCalcWidget(Widget):
             'total_gain': 0,
             'total_loss': 0,
 
+            # ✅ AJOUT : Vitesse verticale
+            'max_vspeed': float('-inf'),
+            'min_vspeed': float('inf'),
+            'avg_vspeed': 0,
+            'vspeed_sum': 0,
+            'vspeed_count': 0,
+
             # Meilleur tour
             'best_lap': None,
             'best_lapnum': None,
@@ -205,9 +212,18 @@ class CustomCalcWidget(Widget):
                 stats['temp_sum'] += temp
                 stats['temp_count'] += 1
 
-            lapnum = get_val('lap', None)
-            laptime = get_val('laptime', None)
-            laptime_str = get_val('laptime_str', None)
+            # ✅ AJOUT : Vitesse verticale
+            vspeed = get_val('vspeed')
+            if vspeed is not None:
+                stats['max_vspeed'] = max(stats['max_vspeed'], vspeed)
+                stats['min_vspeed'] = min(stats['min_vspeed'], vspeed)
+                stats['vspeed_sum'] += vspeed
+                stats['vspeed_count'] += 1
+
+            # Tours
+            lapnum = get_val('lap')
+            laptime = get_val('laptime')
+            laptime_str = get_val('laptime_str')
             if lapnum is not None and laptime is not None:
                 if lapnum not in laptimes:
                     laptimes[lapnum] = laptime
@@ -215,21 +231,23 @@ class CustomCalcWidget(Widget):
                 if lapnum not in laptimes_str:
                     laptimes_str[lapnum] = laptime_str
 
-            valid_laps = {num: time for num, time in laptimes.items() if num > 0}
-            valid_laps_str = {num: time for num, time in laptimes_str.items() if num > 0}
-            if valid_laps:
-                best_lapnum = min(valid_laps, key=valid_laps.get)
-                stats['best_lap'] = valid_laps[best_lapnum]
-                stats['best_lap_str'] = valid_laps_str[best_lapnum]
-                stats['best_lapnum'] = best_lapnum
+        # Meilleur tour
+        valid_laps = {num: time for num, time in laptimes.items() if num > 0}
+        valid_laps_str = {num: time for num, time in laptimes_str.items() if num > 0}
+        if valid_laps:
+            best_lapnum = min(valid_laps, key=valid_laps.get)
+            stats['best_lap'] = valid_laps[best_lapnum]
+            stats['best_lap_str'] = valid_laps_str[best_lapnum]
+            stats['best_lapnum'] = best_lapnum
 
-            # Calculer les moyennes
+        # Calculer les moyennes
         stats['avg_speed'] = stats['speed_sum'] / stats['speed_count'] if stats['speed_count'] > 0 else 0
         stats['avg_hr'] = stats['hr_sum'] / stats['hr_count'] if stats['hr_count'] > 0 else 0
         stats['avg_alt'] = stats['alt_sum'] / stats['alt_count'] if stats['alt_count'] > 0 else 0
         stats['avg_cadence'] = stats['cadence_sum'] / stats['cadence_count'] if stats['cadence_count'] > 0 else 0
         stats['avg_power'] = stats['power_sum'] / stats['power_count'] if stats['power_count'] > 0 else 0
         stats['avg_temp'] = stats['temp_sum'] / stats['temp_count'] if stats['temp_count'] > 0 else 0
+        stats['avg_vspeed'] = stats['vspeed_sum'] / stats['vspeed_count'] if stats['vspeed_count'] > 0 else 0  # ✅
 
         # Corriger les valeurs infinies
         if stats['min_speed'] == float('inf'):
@@ -248,6 +266,11 @@ class CustomCalcWidget(Widget):
             stats['min_temp'] = 0
         if stats['max_temp'] == float('-inf'):
             stats['max_temp'] = 0
+        # ✅ AJOUT
+        if stats['min_vspeed'] == float('inf'):
+            stats['min_vspeed'] = 0
+        if stats['max_vspeed'] == float('-inf'):
+            stats['max_vspeed'] = 0
 
         return stats
 
@@ -280,6 +303,7 @@ class CustomCalcWidget(Widget):
             'temp': safe_get('temp'),
             'grad': safe_get('grad') or safe_get('cgrad'),
             'dist': safe_get('dist'),
+            'vspeed': safe_get('vspeed'),  # ✅ AJOUT : Vitesse verticale
 
             # Données de tour
             'lap': safe_get('lap', 0),
@@ -294,10 +318,10 @@ class CustomCalcWidget(Widget):
             'max': max,
             'min': min,
             'abs': abs,
-            'int': int,  # *** AJOUT ***
-            'float': float,  # *** AJOUT ***
-            'str': str,  # *** AJOUT ***
-            'round': round,  # *** AJOUT ***
+            'int': int,
+            'float': float,
+            'str': str,
+            'round': round,
             'precalc': self.precalc_stats,
         }
 
@@ -308,7 +332,7 @@ class CustomCalcWidget(Widget):
             if value is None:
                 value = self.state.get('last_value', 0)
 
-            # *** AJOUT : Extraire magnitude si c'est un objet Pint ***
+            # Extraire magnitude si c'est un objet Pint
             if hasattr(value, 'magnitude'):
                 value = value.magnitude
 
