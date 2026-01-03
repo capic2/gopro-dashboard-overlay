@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
 Script de conversion MyChron 5 → GPX pour gopro-dashboard-overlay
-Version: 3.3 - Avec merge GPX externe (heart rate)
+Version: 3.3 - Avec gestion des tours + Heart Rate externe (optionnel)
 """
 
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 import os
-import xml.etree.ElementTree as ET
-from typing import Optional, Dict, List, Tuple
 
 
-def parse_external_gpx_hr(gpx_file: str) -> Dict[datetime, float]:
+def parse_external_gpx_hr(gpx_file):
     """
-    Parse un GPX externe et extrait les données de heart rate avec timestamps
-
-    Returns:
-        Dict[datetime, float]: {timestamp: heart_rate_bpm}
+    Parse un GPX externe (ex: Amazfit) pour extraire les données de heart rate
+    Returns: dict {datetime: hr_value}
     """
-    print(f"\n📂 Lecture GPX externe pour heart rate : {gpx_file}")
+    import xml.etree.ElementTree as ET
+
+    print(f"\n💓 Lecture heart rate depuis : {gpx_file}")
 
     hr_data = {}
 
@@ -27,127 +25,130 @@ def parse_external_gpx_hr(gpx_file: str) -> Dict[datetime, float]:
         tree = ET.parse(gpx_file)
         root = tree.getroot()
 
-        # Namespaces GPX/Garmin
+        # Namespaces
         ns = {
             'gpx': 'http://www.topografix.com/GPX/1/1',
-            'gpxtpx': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v2',
-            'gpxtpx1': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1'
+            'ns3': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1',
+            'gpxtpx': 'http://www.garmin.com/xmlschemas/TrackPointExtension/v2'
         }
 
-        # Cherche tous les trackpoints
+        # Trouver tous les trackpoints
         for trkpt in root.findall('.//gpx:trkpt', ns):
             time_elem = trkpt.find('gpx:time', ns)
-            if time_elem is None:
-                continue
 
-            # Parse le timestamp
-            time_str = time_elem.text
-            try:
-                # Format ISO8601
-                timestamp = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-            except:
-                continue
+            if time_elem is not None:
+                time_str = time_elem.text
 
-            # Cherche heart rate dans les extensions
-            hr = None
-            extensions = trkpt.find('gpx:extensions', ns)
-            if extensions is not None:
-                # TrackPointExtension v2
-                tpx = extensions.find('gpxtpx:TrackPointExtension', ns)
-                if tpx is not None:
-                    hr_elem = tpx.find('gpxtpx:hr', ns)
-                    if hr_elem is not None:
-                        try:
-                            hr = float(hr_elem.text)
-                        except:
-                            pass
+                # Parser le timestamp
+                try:
+                    # Format: 2025-11-08T13:53:47Z
+                    point_time = datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%SZ')
+                    point_time = point_time.replace(tzinfo=timezone.utc)
+                except:
+                    try:
+                        # Format alternatif: 2025-11-08T13:53:47.000Z
+                        point_time = datetime.strptime(time_str.split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                        point_time = point_time.replace(tzinfo=timezone.utc)
+                    except:
+                        continue
 
-                # TrackPointExtension v1 (fallback)
-                if hr is None:
-                    tpx1 = extensions.find('gpxtpx1:TrackPointExtension', ns)
-                    if tpx1 is not None:
-                        hr_elem = tpx1.find('gpxtpx1:hr', ns)
+                # Chercher HR dans les extensions
+                hr = None
+                extensions = trkpt.find('gpx:extensions', ns)
+                if extensions is not None:
+                    # Essayer ns3:hr (Amazfit)
+                    tpe = extensions.find('ns3:TrackPointExtension', ns)
+                    if tpe is not None:
+                        hr_elem = tpe.find('ns3:hr', ns)
                         if hr_elem is not None:
                             try:
-                                hr = float(hr_elem.text)
+                                hr = int(float(hr_elem.text))
                             except:
                                 pass
 
-            if hr is not None:
-                hr_data[timestamp] = hr
+                    # Essayer gpxtpx:hr (Garmin)
+                    if hr is None:
+                        tpe = extensions.find('gpxtpx:TrackPointExtension', ns)
+                        if tpe is not None:
+                            hr_elem = tpe.find('gpxtpx:hr', ns)
+                            if hr_elem is not None:
+                                try:
+                                    hr = int(float(hr_elem.text))
+                                except:
+                                    pass
 
-        print(f"✅ {len(hr_data)} points avec heart rate trouvés")
+                if hr is not None and hr > 0:
+                    hr_data[point_time] = hr
 
+        print(f"   ✅ {len(hr_data)} points avec heart rate trouvés")
         if hr_data:
-            hr_values = list(hr_data.values())
-            print(f"   • HR min  : {min(hr_values):.0f} bpm")
-            print(f"   • HR max  : {max(hr_values):.0f} bpm")
-            print(f"   • HR moy  : {sum(hr_values) / len(hr_values):.0f} bpm")
+            times = sorted(hr_data.keys())
+            print(f"   📅 Plage temporelle : {times[0]} → {times[-1]}")
+            hrs = list(hr_data.values())
+            print(f"   💓 FC min/max/moy : {min(hrs)}/{max(hrs)}/{sum(hrs) // len(hrs)} bpm")
 
         return hr_data
 
     except Exception as e:
-        print(f"⚠️  Erreur lecture GPX externe : {e}")
+        print(f"❌ Erreur lecture GPX externe : {e}")
         return {}
 
 
-def interpolate_hr(timestamp: datetime, hr_data: Dict[datetime, float]) -> Optional[float]:
+def interpolate_hr(target_time, hr_data):
     """
-    Interpole la fréquence cardiaque pour un timestamp donné
-
-    Args:
-        timestamp: Timestamp pour lequel on veut le HR
-        hr_data: Dictionnaire {timestamp: hr}
-
-    Returns:
-        Heart rate interpolée ou None
+    Interpole le heart rate pour un timestamp donné
     """
     if not hr_data:
         return None
 
-    timestamps = sorted(hr_data.keys())
+    # Trouver les deux points HR les plus proches
+    times = sorted(hr_data.keys())
 
-    # Si timestamp exact
-    if timestamp in hr_data:
-        return hr_data[timestamp]
+    # Si target_time est avant le premier point
+    if target_time < times[0]:
+        # Accepter si décalage < 5 secondes
+        if (times[0] - target_time).total_seconds() < 5:
+            return hr_data[times[0]]
+        return None
 
-    # Cherche les deux points encadrants
+    # Si target_time est après le dernier point
+    if target_time > times[-1]:
+        # Accepter si décalage < 5 secondes
+        if (target_time - times[-1]).total_seconds() < 5:
+            return hr_data[times[-1]]
+        return None
+
+    # Trouver les deux points encadrants
     before = None
     after = None
 
-    for ts in timestamps:
-        if ts <= timestamp:
-            before = ts
-        elif ts > timestamp and after is None:
-            after = ts
+    for t in times:
+        if t <= target_time:
+            before = t
+        if t >= target_time and after is None:
+            after = t
             break
 
-    # Pas de données disponibles
-    if before is None and after is None:
-        return None
-
-    # Avant le premier point
-    if before is None:
-        return hr_data[after]
-
-    # Après le dernier point
-    if after is None:
+    # Si on a trouvé un point exact
+    if before and (target_time - before).total_seconds() == 0:
         return hr_data[before]
 
-    # Interpolation linéaire
-    hr_before = hr_data[before]
-    hr_after = hr_data[after]
+    # Si on a deux points encadrants, interpoler
+    if before and after:
+        time_diff = (after - before).total_seconds()
+        if time_diff <= 10:  # N'interpoler que si les points sont proches (< 10s)
+            ratio = (target_time - before).total_seconds() / time_diff
+            hr_before = hr_data[before]
+            hr_after = hr_data[after]
+            interpolated_hr = hr_before + (hr_after - hr_before) * ratio
+            return int(interpolated_hr)
 
-    time_total = (after - before).total_seconds()
-    time_elapsed = (timestamp - before).total_seconds()
+    # Sinon, prendre le point le plus proche
+    if before:
+        if (target_time - before).total_seconds() < 5:
+            return hr_data[before]
 
-    if time_total == 0:
-        return hr_before
-
-    ratio = time_elapsed / time_total
-    hr_interpolated = hr_before + (hr_after - hr_before) * ratio
-
-    return hr_interpolated
+    return None
 
 
 def parse_mychron_metadata(csv_file):
@@ -169,7 +170,10 @@ def parse_mychron_metadata(csv_file):
 
 
 def parse_lap_data(metadata):
-    """Parse les données de tours depuis les métadonnées"""
+    """
+    Parse les données de tours depuis les métadonnées
+    Retourne: (beacon_markers, segment_times, segment_times_str)
+    """
     beacon_markers = []
     segment_times = []
     segment_times_str = []
@@ -198,7 +202,10 @@ def parse_lap_data(metadata):
 
 
 def get_lap_info(time_s, beacon_markers, segment_times, segment_times_str):
-    """Détermine les informations de tour pour un timestamp donné"""
+    """
+    Détermine les informations de tour pour un timestamp donné
+    Returns: tuple: (lap_number, lap_time, lap_time_str, lap_type)
+    """
     if not beacon_markers or not segment_times:
         return None, None, None, None
 
@@ -284,8 +291,9 @@ def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None)
         print("\n⚠️  Heure de départ non détectée - utilisation heure actuelle")
         start_datetime = datetime.now()
 
-    # ✅ Parse GPX externe pour heart rate
+    # Parse GPX externe pour heart rate (OPTIONNEL)
     hr_data = {}
+    hr_merged_count = 0
     if external_gpx and os.path.exists(external_gpx):
         hr_data = parse_external_gpx_hr(external_gpx)
 
@@ -341,100 +349,114 @@ def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None)
 
     # Parse les données
     nbr_point_count = 0
-    hr_merged_count = 0
 
     with open(csv_file, 'r', encoding='utf-8') as f:
-    # Skip jusqu'aux en-têtes
-        for _ in range(14):
+        # Skip les 13 premières lignes de métadonnées
+        for _ in range(13):
             next(f)
 
-            headers_line = next(f)
-            headers = [h.strip('"') for h in headers_line.strip().split(',')]
-            next(f)  # Skip unités
+        # Skip les lignes vides jusqu'aux headers
+        headers_line = None
+        for line in f:
+            if line.strip():  # Si la ligne n'est pas vide
+                headers_line = line
+                break
 
-            reader = csv.DictReader(f, fieldnames=headers)
+        if not headers_line:
+            print("❌ Headers introuvables")
+            return output_gpx, 0
 
-            for row in reader:
-                try:
-                    time_s = float(row['Time'])
-                    lat = float(row['GPS Latitude'])
-                    lon = float(row['GPS Longitude'])
+        headers = [h.strip('"') for h in headers_line.strip().split(',')]
+        print(f"   ✅ Headers trouvés : {len(headers)} colonnes")
 
-                    if abs(lat) < 0.001 and abs(lon) < 0.001:
-                        continue
+        # Skip la ligne d'unités (la ligne suivante)
+        units_line = next(f, None)
+        if not units_line:
+            print("❌ Pas de ligne d'unités")
+            return output_gpx, 0
 
-                    # Timestamp
-                    point_time = start_datetime + timedelta(seconds=time_s)
-                    time_str = point_time.isoformat() + 'Z'
+        # Maintenant lire les données
+        reader = csv.DictReader(f, fieldnames=headers)
 
-                    # Données de base
-                    ele = float(row.get('GPS Altitude', 0))
-                    speed = float(row.get('GPS Speed', 0)) / 3.6
-                    rpm = float(row.get('RPM', 0))
-                    water_temp = float(row.get('Water Temp', 0))
-                    exhaust_temp = float(row.get('Exhaust Temp', 0))
-                    calculated_gear = float(row.get('Calculated Gear', 0))
+        for row in reader:
+            try:
+                time_s = float(row['Time'])
+                lat = float(row['GPS Latitude'])
+                lon = float(row['GPS Longitude'])
 
-                    lat_accel = float(row.get('GPS LatAcc', 0))
-                    lon_accel = float(row.get('GPS LonAcc', 0))
-
-                    accel_x = float(row.get('AccelerometerX', 0))
-                    accel_y = float(row.get('AccelerometerY', 0))
-                    accel_z = float(row.get('AccelerometerZ', 0))
-
-                    lap_number, lap_time, lap_time_str, lap_type = get_lap_info(
-                        time_s, beacon_markers, segment_times, segment_times_str
-                    )
-
-                    # ✅ Interpoler heart rate depuis GPX externe
-                    hr = None
-                    if hr_data:
-                        hr = interpolate_hr(point_time, hr_data)
-                        if hr is not None:
-                            hr_merged_count += 1
-
-                    # Point GPX
-                    gpx_lines.append(f'      <trkpt lat="{lat}" lon="{lon}">')
-                    gpx_lines.append(f'        <ele>{ele}</ele>')
-                    gpx_lines.append(f'        <time>{time_str}</time>')
-
-                    gpx_lines.append('        <extensions>')
-                    gpx_lines.append('          <gpxtpx:TrackPointExtension>')
-
-                    gpx_lines.append(f'            <gpxtpx:speed>{speed:.6f}</gpxtpx:speed>')
-                    gpx_lines.append(f'            <gpxtpx:atemp>{water_temp:.2f}</gpxtpx:atemp>')
-                    gpx_lines.append(f'            <gpxtpx:exhaust_temp>{exhaust_temp:.2f}</gpxtpx:exhaust_temp>')
-                    gpx_lines.append(f'            <gpxtpx:cad>{int(rpm)}</gpxtpx:cad>')
-                    gpx_lines.append(f'            <gpxtpx:calculated_gear>{int(calculated_gear)}</gpxtpx:calculated_gear>')
-
-                    # ✅ Ajouter heart rate si disponible
-                    if hr is not None:
-                        gpx_lines.append(f'            <gpxtpx:hr>{int(hr)}</gpxtpx:hr>')
-
-                    if lap_number is not None:
-                        gpx_lines.append(f'            <gpxtpx:lap>{lap_number}</gpxtpx:lap>')
-                    if lap_time is not None:
-                        gpx_lines.append(f'            <gpxtpx:laptime>{lap_time:.3f}</gpxtpx:laptime>')
-                    if lap_time_str is not None:
-                        gpx_lines.append(f'            <gpxtpx:laptime_str>{lap_time_str}</gpxtpx:laptime_str>')
-                    if lap_type is not None:
-                        gpx_lines.append(f'            <gpxtpx:laptype>{lap_type}</gpxtpx:laptype>')
-
-                    gpx_lines.append('          </gpxtpx:TrackPointExtension>')
-
-                    gpx_lines.append('          <gpxpx:Acceleration>')
-                    gpx_lines.append(f'            <gpxpx:x>{accel_x:.6f}</gpxpx:x>')
-                    gpx_lines.append(f'            <gpxpx:y>{accel_y:.6f}</gpxpx:y>')
-                    gpx_lines.append(f'            <gpxpx:z>{accel_z:.6f}</gpxpx:z>')
-                    gpx_lines.append('          </gpxpx:Acceleration>')
-
-                    gpx_lines.append('        </extensions>')
-                    gpx_lines.append('      </trkpt>')
-
-                    nbr_point_count += 1
-
-                except (ValueError, KeyError):
+                if abs(lat) < 0.001 and abs(lon) < 0.001:
                     continue
+
+                point_time = start_datetime + timedelta(seconds=time_s)
+                time_str = point_time.isoformat() + 'Z'
+
+                # Données de base
+                ele = float(row.get('GPS Altitude', 0))
+                speed = float(row.get('GPS Speed', 0)) / 3.6
+                rpm = float(row.get('RPM', 0))
+                water_temp = float(row.get('Water Temp', 0))
+                exhaust_temp = float(row.get('Exhaust Temp', 0))
+                calculated_gear = float(row.get('Calculated Gear', 0))
+
+                accel_x = float(row.get('AccelerometerX', 0))
+                accel_y = float(row.get('AccelerometerY', 0))
+                accel_z = float(row.get('AccelerometerZ', 0))
+
+                # Informations de tour
+                lap_number, lap_time, lap_time_str, lap_type = get_lap_info(
+                    time_s, beacon_markers, segment_times, segment_times_str
+                )
+
+                # Interpoler heart rate depuis GPX externe (si disponible)
+                hr = None
+                if hr_data:
+                    hr = interpolate_hr(point_time, hr_data)
+                    if hr is not None:
+                        hr_merged_count += 1
+
+                # Point GPX
+                gpx_lines.append(f'      <trkpt lat="{lat}" lon="{lon}">')
+                gpx_lines.append(f'        <ele>{ele}</ele>')
+                gpx_lines.append(f'        <time>{time_str}</time>')
+
+                gpx_lines.append('        <extensions>')
+                gpx_lines.append('          <gpxtpx:TrackPointExtension>')
+
+                gpx_lines.append(f'            <gpxtpx:speed>{speed:.6f}</gpxtpx:speed>')
+                gpx_lines.append(f'            <gpxtpx:atemp>{water_temp:.2f}</gpxtpx:atemp>')
+                gpx_lines.append(f'            <gpxtpx:exhaust_temp>{exhaust_temp:.2f}</gpxtpx:exhaust_temp>')
+                gpx_lines.append(f'            <gpxtpx:cad>{int(rpm)}</gpxtpx:cad>')
+                gpx_lines.append(f'            <gpxtpx:calculated_gear>{int(calculated_gear)}</gpxtpx:calculated_gear>')
+
+                # Heart rate (si disponible)
+                if hr is not None:
+                    gpx_lines.append(f'            <gpxtpx:hr>{int(hr)}</gpxtpx:hr>')
+
+                # Informations de tour
+                if lap_number is not None:
+                    gpx_lines.append(f'            <gpxtpx:lap>{lap_number}</gpxtpx:lap>')
+                if lap_time is not None:
+                    gpx_lines.append(f'            <gpxtpx:laptime>{lap_time:.3f}</gpxtpx:laptime>')
+                if lap_time_str is not None:
+                    gpx_lines.append(f'            <gpxtpx:laptime_str>{lap_time_str}</gpxtpx:laptime_str>')
+                if lap_type is not None:
+                    gpx_lines.append(f'            <gpxtpx:laptype>{lap_type}</gpxtpx:laptype>')
+
+                gpx_lines.append('          </gpxtpx:TrackPointExtension>')
+
+                gpx_lines.append('          <gpxpx:Acceleration>')
+                gpx_lines.append(f'            <gpxpx:x>{accel_x:.6f}</gpxpx:x>')
+                gpx_lines.append(f'            <gpxpx:y>{accel_y:.6f}</gpxpx:y>')
+                gpx_lines.append(f'            <gpxpx:z>{accel_z:.6f}</gpxpx:z>')
+                gpx_lines.append('          </gpxpx:Acceleration>')
+
+                gpx_lines.append('        </extensions>')
+                gpx_lines.append('      </trkpt>')
+
+                nbr_point_count += 1
+
+            except (ValueError, KeyError) as e:
+                continue
 
     gpx_lines.append('    </trkseg>')
     gpx_lines.append('  </trk>')
@@ -447,7 +469,7 @@ def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None)
     print(f"\n✅ GPX créé : {output_gpx}")
     print(f"📊 {nbr_point_count} points GPS exportés")
     if hr_data:
-        print(f"❤️  {hr_merged_count} points avec heart rate mergés ({hr_merged_count / nbr_point_count * 100:.1f}%)")
+        print(f"💓 {hr_merged_count} points avec heart rate mergés ({hr_merged_count / nbr_point_count * 100:.1f}%)")
 
     return output_gpx, nbr_point_count
 
@@ -457,21 +479,22 @@ def print_usage():
     print("""
 ╔════════════════════════════════════════════════════════════════╗
 ║  MyChron 5 → GPX Converter (pour gopro-dashboard-overlay)     ║
-║  Version 3.3 - Avec merge GPX externe (heart rate)            ║
+║  Version 3.3 - Avec gestion des tours + Heart Rate externe    ║
 ╚════════════════════════════════════════════════════════════════╝
 
 Usage:
-    python mychron_to_gpx.py <mychron.csv> [--merge-gpx <external.gpx>]
+    python mychron_to_gpx.py <mychron.csv> [external.gpx]
+
+Arguments:
+    mychron.csv     Fichier CSV MyChron (requis)
+    external.gpx    GPX externe pour heart rate (optionnel)
 
 Exemples:
-    # Sans merge
+    # Sans heart rate
     python mychron_to_gpx.py 8.csv
 
-    # Avec merge heart rate
-    python mychron_to_gpx.py 8.csv --merge-gpx gopro_data.gpx
-
-Options:
-    --merge-gpx <file>  GPX externe contenant heart rate à merger
+    # Avec heart rate Amazfit
+    python mychron_to_gpx.py 8.csv amazfit.gpx
     """)
 
 
@@ -483,18 +506,16 @@ if __name__ == "__main__":
     mychron_csv = sys.argv[1]
     external_gpx = None
 
-    # Parse arguments
-    if '--merge-gpx' in sys.argv:
-        idx = sys.argv.index('--merge-gpx')
-        if idx + 1 < len(sys.argv):
-            external_gpx = sys.argv[idx + 1]
+    # Si un deuxième fichier est fourni, c'est le GPX externe
+    if len(sys.argv) >= 3:
+        external_gpx = sys.argv[2]
 
     if not os.path.exists(mychron_csv):
         print(f"❌ Fichier CSV introuvable : {mychron_csv}")
         sys.exit(1)
 
     if external_gpx and not os.path.exists(external_gpx):
-        print(f"⚠️  GPX externe introuvable : {external_gpx}")
+        print(f"⚠️  GPX externe introuvable : {external_gpx} - ignoré")
         external_gpx = None
 
     base_name = os.path.splitext(mychron_csv)[0]
@@ -502,6 +523,8 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 70)
     print("🏁 MyChron 5 → GPX Converter v3.3".center(70))
+    if external_gpx:
+        print("💓 Mode : Avec Heart Rate externe".center(70))
     print("=" * 70)
 
     # Conversion
@@ -524,15 +547,10 @@ if __name__ == "__main__":
     print("  • speed      - Vitesse GPS")
     print("  • temp       - Température eau")
     print("  • cadence    - RPM moteur")
-    print("  • hr         - Heart rate (si mergé)")
+    if external_gpx:
+        print("  • hr         - Heart rate (externe)")
     print("  • accl.x/y/z - Accélérations (g)")
     print("  • lap        - Numéro de tour")
     print("  • laptime    - Temps du tour (s)")
     print("  • laptype    - Type (OUT/TIMED/IN)")
-    print("\n" + "-" * 70)
-    print("💡 Commande gopro-dashboard-overlay :")
-    print("-" * 70)
-    print(f"gopro-dashboard.py --gpx {result_gpx} --gpx-merge OVERWRITE \\")
-    print(f"    --input ta_video.MP4 --output overlay.MP4 \\")
-    print(f"    --layout karting.xml")
     print("\n" + "=" * 70 + "\n")

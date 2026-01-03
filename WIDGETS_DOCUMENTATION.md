@@ -1,356 +1,359 @@
 # Widgets Documentation - GoPro Dashboard Overlay
 
-Complete documentation of available widgets for creating custom video overlays.
+Documentation complète des widgets personnalisés pour créer des overlays vidéo avec données télémétrie.
 
-## Table of Contents
+## Table des matières
 
-- [Custom Widgets (Racing/Karting)](#custom-widgets-racingkarting)
+- [Widgets Personnalisés (Course/Karting)](#widgets-personnalisés-coursekarting)
   - [custom_calc](#custom_calc)
   - [rpm_bar](#rpm_bar)
-  - [gforce](#gforce)
+  - [gforce_circle](#gforce_circle)
   - [lap_chronometer](#lap_chronometer)
   - [lap_times_table](#lap_times_table)
-- [Standard Widgets](#standard-widgets)
-- [Layout Components](#layout-components)
-- [Complete Configuration](#complete-configuration--karting-layout)
-- [Python Functions](#python-functions)
-- [Tips & Best Practices](#tips--best-practices)
-- [Troubleshooting](#troubleshooting)
+- [Widgets Standards](#widgets-standards)
+- [Composants de Layout](#composants-de-layout)
+- [Configuration Complète](#configuration-complète--layout-karting)
+- [Données GPX Requises](#données-gpx-requises)
+- [Conseils & Bonnes Pratiques](#conseils--bonnes-pratiques)
+- [Dépannage](#dépannage)
 
 ---
 
-## Custom Widgets (Racing/Karting)
+## Widgets Personnalisés (Course/Karting)
 
 ### custom_calc
 
-**Description**: Widget to display calculated values with custom Python expressions. Supports pre-calculated statistics over the entire session.
+**Description** : Widget flexible permettant des calculs et affichages personnalisés via expressions Python.
 
-**Type**: `custom_calc`
+**Type** : `custom_calc`
 
-#### XML Attributes
+#### Attributs XML
 
-| Attribute | Type | Default | Description |
+| Attribut | Type | Défaut | Description |
 |----------|------|--------|-------------|
-| `x`, `y` | int | - | Position (required) |
-| `expression` | string | - | Python expression (required) |
-| `size` | int | 18 | Font size |
-| `align` | string | "left" | Alignment: "left", "centre", "right" |
+| `x`, `y` | int | requis | Position |
+| `expression` | string | requis | Expression Python à évaluer |
+| `label` | string | "" | Label avant la valeur |
+| `unit` | string | "" | Unité après la valeur |
+| `dp` | int | 1 | Nombre de décimales |
+| `size` | int | 20 | Taille de police |
+| `template` | string | text | Template : `text`, `bar`, `box` |
+| `align` | string | left | Alignement : `left`, `right`, `centre` |
 
-#### Available Variables in `expression`
+#### Paramètres template="bar"
 
-##### Common Metrics
-- `speed` - Current speed (km/h)
-- `rpm`, `cad` - Engine RPM
-- `temp` - Water/engine temperature
-- `gear` - Gear ratio
-- `lap` - Current lap number
-- `laptime` - Total lap time
-- `laptime_str` - Formatted time (e.g., "0:41.045")
-- `laptype` - Lap type (`'OUT'`, `'TIMED'`, `'IN'`)
+| Attribut | Type | Défaut | Description |
+|----------|------|--------|-------------|
+| `bar_width` | int | 200 | Largeur de la barre |
+| `bar_height` | int | 20 | Hauteur de la barre |
+| `bar_max` | int | 100 | Valeur maximum |
+| `bar_color` | rgb | 0,255,100 | Couleur de remplissage |
+| `bar_bg` | rgb | 50,50,50 | Couleur de fond |
 
-##### Accelerations
-- `accl.x`, `accl.y`, `accl.z` - Accelerations (g)
-- `gps_lat_acc`, `gps_lon_acc` - GPS lateral/longitudinal acceleration
+#### Variables disponibles dans `expression`
 
-##### Pre-calculated Statistics (`precalc`)
-```python
-precalc['max_speed']        # Session max speed
-precalc['max_rpm']          # Max RPM
-precalc['max_temp']         # Max temperature
-precalc['max_lat_acc']      # Max lateral acceleration
-precalc['max_lon_acc']      # Max longitudinal acceleration
-precalc['max_g_combined']   # Max combined G
-```
+##### Données instantanées
 
-##### Utility Functions
-```python
-format_speed(speed)          # Format: "125 km/h"
-format_temp(temp)            # Format: "78°C"
-format_rpm(rpm)              # Format: "12500 RPM"
-format_g(g_value)            # Format: "2.5g"
-format_laptime(seconds)      # Format: "0:41.045"
-```
+| Variable | Description | Unité |
+|----------|-------------|-------|
+| `alt` | Altitude | m |
+| `speed` | Vitesse | m/s |
+| `hr` | Fréquence cardiaque | bpm |
+| `cadence` | Cadence (RPM) | rpm |
+| `power` | Puissance | W |
+| `temp` | Température eau | °C |
+| `grad` | Gradient/pente | % |
+| `dist` | Distance | m |
+| `vspeed` | Vitesse verticale | m/s |
 
-#### Examples
+##### Données de tour
+
+| Variable | Description |
+|----------|-------------|
+| `lap` | Numéro de tour actuel |
+| `laptime` | Temps du tour (secondes) |
+| `laptime_str` | Temps du tour formaté ("0:41.045") |
+| `laptype` | Type de tour (OUT/TIMED/IN) |
+
+##### Stats globales (via `precalc`)
+
+| Variable | Description |
+|----------|-------------|
+| `precalc['max_speed']` | Vitesse max (km/h) |
+| `precalc['avg_speed']` | Vitesse moyenne (km/h) |
+| `precalc['max_hr']` | FC max |
+| `precalc['avg_hr']` | FC moyenne |
+| `precalc['max_alt']` | Altitude max (m) |
+| `precalc['min_alt']` | Altitude min (m) |
+| `precalc['total_gain']` | Dénivelé positif (m) |
+| `precalc['total_loss']` | Dénivelé négatif (m) |
+| `precalc['max_vspeed']` | Vitesse verticale max (m/s) |
+| `precalc['min_vspeed']` | Vitesse verticale min (m/s) |
+| `precalc['avg_vspeed']` | Vitesse verticale moyenne (m/s) |
+| `precalc['best_lap']` | Temps du meilleur tour (s) |
+| `precalc['best_lap_str']` | Meilleur tour formaté |
+| `precalc['best_lapnum']` | Numéro du meilleur tour |
+
+##### Fonctions utiles
+
+| Fonction | Description |
+|----------|-------------|
+| `max(a, b)` | Maximum |
+| `min(a, b)` | Minimum |
+| `abs(x)` | Valeur absolue |
+| `int(x)` | Conversion en entier |
+| `float(x)` | Conversion en flottant |
+| `round(x, n)` | Arrondi à n décimales |
+| `str(x)` | Conversion en string |
+| `state['key']` | État persistant entre frames |
+
+#### Exemples
 
 ```xml
-<!-- Simple speed -->
-<component type="custom_calc" 
-           expression="f'{speed:.0f} km/h'" 
-           x="100" y="50" size="32"/>
+<!-- Vitesse en km/h -->
+<component type="custom_calc"
+           x="100" y="100"
+           expression="speed * 3.6"
+           unit=" km/h"
+           dp="1"
+           size="28"/>
 
-<!-- Session max speed -->
-<component type="custom_calc" 
-           expression="f'Max: {precalc.get(\"max_speed\", 0):.0f} km/h'" 
-           x="100" y="90" size="20"/>
+<!-- Vitesse verticale en m/min -->
+<component type="custom_calc"
+           x="100" y="150"
+           expression="vspeed * 60"
+           label="V↑ "
+           unit=" m/min"
+           dp="1"
+           size="24"/>
 
-<!-- Combined G-force -->
-<component type="custom_calc" 
-           expression="format_g(math.sqrt(accl.x**2 + accl.y**2))" 
-           x="300" y="100" size="24"/>
+<!-- Écart au meilleur tour -->
+<component type="custom_calc"
+           x="100" y="200"
+           expression="laptime - precalc['best_lap'] if precalc.get('best_lap') else 0"
+           label="Δ "
+           unit="s"
+           dp="3"
+           size="20"/>
 
-<!-- Gear ratio -->
-<component type="custom_calc" 
-           expression="f'Gear {int(gear)}' if gear > 0 else 'N'" 
-           x="150" y="200" size="30"/>
+<!-- Barre de FC -->
+<component type="custom_calc"
+           x="100" y="250"
+           expression="hr"
+           template="bar"
+           bar_width="300"
+           bar_height="30"
+           bar_max="200"
+           bar_color="255,50,50"
+           unit=" bpm"
+           dp="0"/>
 
-<!-- Formatted lap time -->
-<component type="custom_calc" 
-           expression="laptime_str if laptime_str else '-'" 
-           x="400" y="120" size="26"/>
+<!-- Indicateur montée/descente -->
+<component type="custom_calc"
+           x="100" y="300"
+           expression="'↑' if vspeed > 0.1 else '↓' if vspeed < -0.1 else '→'"
+           size="32"/>
 ```
 
 ---
 
 ### rpm_bar
 
-**Description**: Racing-style segmented RPM bar with increasing bar heights and color gradient (cyan → green → yellow → orange → red).
+**Description** : Barre de régime moteur avec segments colorés et shift lights.
 
-**Type**: `rpm_bar`
+**Type** : `rpm_bar`
 
-#### XML Attributes
+#### Attributs XML
 
-| Attribute | Type | Default | Description |
+| Attribut | Type | Défaut | Description |
 |----------|------|--------|-------------|
-| `x`, `y` | int | - | Position (required) |
-| `width` | int | 300 | Total width |
-| `height` | int | 50 | Total height |
-| `segments` | int | 24 | Number of bars |
-| `segment_width` | int | 8 | Bar width (px) |
-| `segment_spacing` | int | 2 | Spacing between bars (px) |
-| `max_rpm` | int | 15000 | Maximum RPM |
-| `size` | int | 16 | Font size for labels |
-| `show_value` | bool | true | Display RPM value on left |
-| `show_label` | bool | true | Display "RPM X1000" at bottom |
+| `x`, `y` | int | requis | Position |
+| `width` | int | 400 | Largeur totale |
+| `height` | int | 50 | Hauteur totale |
+| `segments` | int | 17 | Nombre de segments |
+| `segment_width` | int | 8 | Largeur d'un segment (px) |
+| `segment_spacing` | int | 2 | Espacement entre segments (px) |
+| `max_rpm` | int | 15000 | RPM maximum |
+| `size` | int | 20 | Taille de police |
+| `show_label` | bool | true | Afficher le label "RPM" |
 
-#### Visual Rendering
+#### Zones de couleur
 
-```
- 12.5  ▁▂▃▄▅▆▇█▇▆▅▄▃▂▁░░░░░░░
-       1   5   10  15
-       RPM X1000
-```
+| Zone | Couleur | Pourcentage |
+|------|---------|-------------|
+| Zone verte | `(0, 255, 0)` | 0-70% |
+| Zone jaune | `(255, 255, 0)` | 70-85% |
+| Zone orange | `(255, 165, 0)` | 85-95% |
+| Zone rouge | `(255, 0, 0)` | 95-100% |
 
-#### Color Gradient
-- **Inactive bars**: Dark gray (40, 40, 40)
-- **Active gradient**:
-  - 0-30%: Cyan → Green
-  - 30-50%: Green → Yellow
-  - 50-70%: Yellow → Orange
-  - 70-100%: Orange → Red
-
-#### Examples
+#### Exemples
 
 ```xml
-<!-- Standard configuration -->
-<component type="rpm_bar" 
-           x="50" y="900" 
-           width="300" height="50" 
-           segments="24" 
-           max_rpm="15000" 
-           size="20"/>
+<!-- Configuration standard karting -->
+<component type="rpm_bar"
+           x="15" y="400"
+           width="400" height="50"
+           segments="17"
+           segment_width="8"
+           segment_spacing="2"
+           max_rpm="15000"
+           size="20"
+           show_label="true"/>
 
-<!-- Compact bar (fewer segments) -->
-<component type="rpm_bar" 
-           x="800" y="950" 
-           width="250" height="40" 
-           segments="16" 
-           segment_width="10" 
-           max_rpm="12000" 
-           show_label="false"/>
-
-<!-- Large HD bar -->
-<component type="rpm_bar" 
-           x="100" y="1800" 
-           width="600" height="80" 
-           segments="30" 
-           segment_width="16" 
-           segment_spacing="3" 
-           max_rpm="18000"/>
+<!-- Barre compacte -->
+<component type="rpm_bar"
+           x="100" y="50"
+           width="300" height="40"
+           segments="15"
+           max_rpm="12000"
+           size="16"/>
 ```
 
 ---
 
-### gforce
+### gforce_circle
 
-**Description**: G-Force circle showing lateral and longitudinal accelerations with a real-time moving point.
+**Description** : Widget circulaire affichant les forces G en temps réel.
 
-**Type**: `gforce`
+**Type** : `gforce_circle`
 
-#### XML Attributes
+#### Attributs XML
 
-| Attribute | Type | Default | Description |
+| Attribut | Type | Défaut | Description |
 |----------|------|--------|-------------|
-| `x`, `y` | int | - | Top-left position |
-| `size` | int | 300 | Circle diameter |
-| `max_g` | float | 2.5 | Maximum G displayed |
-| `font_size` | int | 14 | Font size for labels |
+| `x`, `y` | int | requis | Position |
+| `size` | int | 300 | Diamètre du cercle |
+| `max_g` | float | 2.5 | Force G maximum |
+| `bg_colour` | rgba | 0,0,0,220 | Couleur de fond |
+| `grid_colour` | rgba | 80,80,80,150 | Couleur de la grille |
+| `point_colour` | rgba | 255,50,50,255 | Couleur du point |
+| `line_colour` | rgba | 255,50,50,150 | Couleur de la ligne |
 
-#### Visual Rendering
-
-```
-        Brake
-         ↑
-         │
-    ─────┼─────
-         │
-         ↓
-       Accel
-```
-
-- **Concentric circles**: 0.5g, 1.0g, 1.5g, 2.0g, 2.5g
-- **Red point**: Current G position
-- **Line**: From center to current point
-- **Labels**: "Brake" (top), "Accel" (bottom)
-
-#### Examples
+#### Exemples
 
 ```xml
-<!-- Standard configuration -->
-<component type="gforce" 
-           x="1600" y="50" 
-           size="300" 
-           max_g="2.5" 
-           font_size="14"/>
+<!-- G-Force standard -->
+<component type="gforce_circle"
+           x="30" y="680"
+           size="180"
+           max_g="3"
+           bg_colour="0,0,0,220"
+           grid_colour="80,80,80,150"
+           point_colour="255,50,50,255"
+           line_colour="255,50,50,150"/>
 
-<!-- Small compact circle -->
-<component type="gforce" 
-           x="50" y="50" 
-           size="200" 
-           max_g="2.0" 
-           font_size="12"/>
-
-<!-- Large 4K circle -->
-<component type="gforce" 
-           x="3200" y="100" 
-           size="600" 
-           max_g="3.0" 
-           font_size="20"/>
+<!-- G-Force grand -->
+<component type="gforce_circle"
+           x="100" y="100"
+           size="300"
+           max_g="2.5"/>
 ```
+
+#### Notes
+
+- Cercles concentriques : 0.5g, 1.0g, 1.5g, 2.0g, 2.5g
+- Le point rouge indique la force G actuelle
+- Axes : Vertical = Longitudinal, Horizontal = Latéral
+- Les données proviennent de `accl.x` et `accl.y`
 
 ---
 
 ### lap_chronometer
 
-**Description**: Chronometer displaying elapsed time of current lap with lap number and type (OUT LAP, TIMED, IN LAP).
+**Description** : Chronomètre affichant le temps du tour en cours avec numéro et total de tours.
 
-**Type**: `lap_chronometer`
+**Type** : `lap_chronometer`
 
-#### XML Attributes
+#### Attributs XML
 
-| Attribute | Type | Default | Description |
+| Attribut | Type | Défaut | Description |
 |----------|------|--------|-------------|
-| `x`, `y` | int | - | Position (required) |
-| `width` | int | 280 | Width |
-| `height` | int | 100 | Height |
-| `size` | int | 16 | Base font size |
-| `show_lap_number` | bool | true | Display "LAP X" |
+| `x`, `y` | int | requis | Position |
+| `width` | int | 280 | Largeur du widget |
+| `height` | int | 100 | Hauteur du widget |
+| `size` | int | 20 | Taille de police |
+| `show_lap_number` | bool | true | Afficher le numéro de tour |
 
-#### Visual Rendering
-
-```
-┌──────────────────┐
-│     LAP 3        │
-│                  │
-│   0:32.456       │ (2.5x larger)
-│                  │
-└──────────────────┘
-```
-
-#### Examples
+#### Exemples
 
 ```xml
-<!-- Standard configuration -->
-<component type="lap_chronometer" 
-           x="800" y="50" 
-           width="280" height="100" 
-           size="20" 
+<!-- Chronomètre standard -->
+<component type="lap_chronometer"
+           x="800" y="50"
+           width="280" height="100"
+           size="20"
            show_lap_number="true"/>
 
-<!-- Compact without number -->
-<component type="lap_chronometer" 
-           x="1600" y="900" 
-           width="220" height="80" 
-           size="16" 
+<!-- Chronomètre compact -->
+<component type="lap_chronometer"
+           x="100" y="100"
+           width="200" height="80"
+           size="16"
            show_lap_number="false"/>
 ```
+
+#### Notes
+
+- Affiche "TOUR DE SORTIE" pour le out-lap
+- Affiche "TOUR DE RENTRÉE" pour le in-lap
+- Format temps : `M:SS.mmm`
+- Se réinitialise automatiquement à chaque nouveau tour
 
 ---
 
 ### lap_times_table
 
-**Description**: Table displaying lap times progressively, with best lap highlighted.
+**Description** : Tableau des temps de tour avec mise en évidence du meilleur tour et vitesse max.
 
-**Type**: `lap_times_table`
+**Type** : `lap_times_table`
 
-#### XML Attributes
+#### Attributs XML
 
-| Attribute | Type | Default | Description |
+| Attribut | Type | Défaut | Description |
 |----------|------|--------|-------------|
-| `x`, `y` | int | - | Position (required) |
-| `width` | int | 300 | Table width |
-| `max_laps` | int | 10 | Max laps displayed |
-| `size` | int | 16 | Font size |
-| `show_best` | bool | true | Show star on best lap |
+| `x`, `y` | int | requis | Position |
+| `width` | int | 380 | Largeur du tableau |
+| `max_laps` | int | 10 | Nombre max de tours visibles |
+| `size` | int | 18 | Taille de police |
+| `show_best` | bool | true | Mettre en évidence le meilleur tour |
+| `show_max_speed` | bool | true | Afficher la vitesse max par tour |
 
-#### Visual Rendering
-
-```
-┌────────────────────────┐
-│ LAP           TIME     │
-├────────────────────────┤
-│  1           0:53.064  │
-│  2           0:44.147  │
-│  3           0:44.060  │
-│  4           0:42.303  │
-│  5 ★         0:41.045  │ ← Best lap
-│  6           0:42.513  │
-│  7           0:41.349  │
-│  8           0:42.298  │
-└────────────────────────┘
-```
-
-#### Examples
+#### Exemples
 
 ```xml
-<!-- Standard configuration -->
-<component type="lap_times_table" 
-           x="30" y="300" 
-           width="280" 
-           max_laps="8" 
-           size="18" 
-           show_best="true"/>
+<!-- Tableau complet -->
+<component type="lap_times_table"
+           x="25" y="60"
+           width="380"
+           max_laps="8"
+           size="18"
+           show_best="true"
+           show_max_speed="true"/>
 
-<!-- Compact (last 5 laps) -->
-<component type="lap_times_table" 
-           x="1650" y="700" 
-           width="250" 
-           max_laps="5" 
-           size="14"/>
+<!-- Tableau compact sans vitesse -->
+<component type="lap_times_table"
+           x="50" y="100"
+           width="280"
+           max_laps="5"
+           size="16"
+           show_best="true"
+           show_max_speed="false"/>
 ```
+
+#### Notes
+
+- Le meilleur tour reste affiché même s'il sort de la fenêtre
+- Les tours OUT et IN sont exclus du calcul du meilleur tour
+- La vitesse max est en km/h (convertie automatiquement depuis m/s)
+- Les tours s'affichent uniquement **après** leur complétion
 
 ---
 
-## Standard Widgets
+## Widgets Standards
 
 ### text
 
-**Description**: Display static text.
-
-**Type**: `text`
-
-#### XML Attributes
-
-| Attribute | Type | Default | Description |
-|----------|------|--------|-------------|
-| `x`, `y` | int | - | Position |
-| `size` | int | 16 | Font size |
-| `align` | string | "left" | "left", "centre", "right" |
-| `rgb` | string | "255,255,255" | RGB color |
-| `outline` | string | "0,0,0" | Outline color |
-| `outline_width` | int | 2 | Outline thickness |
-
-#### Example
+**Description** : Affiche du texte statique.
 
 ```xml
 <component type="text" x="100" y="50" size="24" align="centre">
@@ -358,152 +361,69 @@ format_laptime(seconds)      # Format: "0:41.045"
 </component>
 ```
 
----
-
 ### metric
 
-**Description**: Display a metric with automatic formatting.
-
-**Type**: `metric`
-
-#### XML Attributes
-
-| Attribute | Type | Default | Description |
-|----------|------|--------|-------------|
-| `x`, `y` | int | - | Position |
-| `metric` | string | - | Metric name: `speed`, `alt`, `hr`, etc. |
-| `units` | string | auto | Units: `kph`, `mph`, `mps`, `metres` |
-| `dp` | int | 1 | Decimal places |
-| `size` | int | 18 | Font size |
-| `align` | string | "left" | Alignment |
-
-#### Examples
+**Description** : Affiche une métrique avec formatage automatique.
 
 ```xml
-<!-- Speed without decimals -->
-<component type="metric" metric="speed" units="kph" dp="0" 
+<!-- Vitesse sans décimales -->
+<component type="metric" metric="speed" units="kph" dp="0"
            x="100" y="900" size="48"/>
 
-<!-- Altitude -->
-<component type="metric" metric="alt" units="metres" dp="0" 
-           x="200" y="100" size="24"/>
-
-<!-- Heart rate -->
-<component type="metric" metric="hr" dp="0" 
+<!-- Fréquence cardiaque -->
+<component type="metric" metric="hr" dp="0"
            x="300" y="50" size="32"/>
 ```
 
----
+### metric_unit
 
-### chart
-
-**Description**: Graph displaying metric history.
-
-**Type**: `chart`
-
-#### XML Attributes
-
-| Attribute | Type | Default | Description |
-|----------|------|--------|-------------|
-| `x`, `y` | int | - | Position |
-| `width`, `height` | int | - | Dimensions |
-| `metric` | string | - | Metric to plot |
-| `samples` | int | 256 | Number of points |
-| `fill` | string | - | Fill color RGB |
-| `outline` | string | - | Line color RGB |
-
-#### Example
+**Description** : Affiche l'unité d'une métrique.
 
 ```xml
-<component type="chart" 
-           x="100" y="600" 
-           width="400" height="100" 
-           metric="speed" 
-           samples="128" 
-           fill="0,255,0,128" 
-           outline="0,255,0,255"/>
+<component type="metric_unit" metric="speed" units="kph" size="18"
+           x="120" y="178" align="centre">{:~P}</component>
+```
+
+### datetime
+
+**Description** : Affiche date/heure.
+
+```xml
+<component type="datetime" format="%d/%m/%Y %H:%M:%S" size="18" x="20" y="20"/>
+```
+
+### icon
+
+**Description** : Affiche une icône.
+
+```xml
+<component type="icon" x="0" y="0" size="36" file="heart.png"/>
+```
+
+### moving_map
+
+**Description** : Carte GPS avec trace.
+
+```xml
+<component type="moving_map" size="200" rotate="false" corner_radius="20"/>
+```
+
+### msi
+
+**Description** : Jauge circulaire style tableau de bord.
+
+```xml
+<component type="msi" metric="speed" units="kph"
+           size="200" end="120" yellow="100" green="80" needle="1"/>
 ```
 
 ---
 
-### map
-
-**Description**: GPS map with route trace.
-
-**Type**: `map`
-
-#### XML Attributes
-
-| Attribute | Type | Default | Description |
-|----------|------|--------|-------------|
-| `x`, `y` | int | - | Position |
-| `size` | int | 256 | Map size (square) |
-| `zoom` | int | 15 | Zoom level |
-| `corner` | int | - | Rounded corners (px) |
-| `rotation` | string | "fixed" | "fixed" or "moving" |
-
-#### Examples
-
-```xml
-<!-- Simple map -->
-<component type="map" 
-           x="50" y="50" 
-           size="300" 
-           zoom="16"/>
-
-<!-- Rotating map with rounded corners -->
-<component type="map" 
-           x="1600" y="50" 
-           size="400" 
-           zoom="15" 
-           rotation="moving" 
-           corner="20"/>
-```
-
----
-
-### msi/msi2
-
-**Description**: Motor Speed Indicator - Circular speed gauge (car dashboard style).
-
-**Type**: `msi` or `msi2`
-
-#### XML Attributes
-
-| Attribute | Type | Default | Description |
-|----------|------|--------|-------------|
-| `x`, `y` | int | - | Center position |
-| `metric` | string | "speed" | Metric to display |
-| `units` | string | "kph" | Units |
-| `size` | int | 180 | Diameter |
-| `start`, `end` | int | - | Value range |
-| `yellow`, `green` | int | - | Color thresholds |
-| `needle` | int | 1 | Show needle |
-| `textsize` | int | 16 | Central text size |
-
-#### Example
-
-```xml
-<component type="msi" 
-           x="960" y="540" 
-           metric="speed" 
-           units="kph" 
-           size="200" 
-           start="0" 
-           end="200" 
-           yellow="150" 
-           green="100" 
-           needle="1"
-           textsize="16"/>
-```
-
----
-
-## Layout Components
+## Composants de Layout
 
 ### composite
 
-Groups multiple widgets at a relative position.
+Groupe plusieurs widgets à une position relative.
 
 ```xml
 <composite x="100" y="100" name="speed_block">
@@ -514,7 +434,7 @@ Groups multiple widgets at a relative position.
 
 ### translate
 
-Shifts a group of widgets.
+Déplace un groupe de widgets.
 
 ```xml
 <translate x="1720" y="780">
@@ -522,171 +442,223 @@ Shifts a group of widgets.
 </translate>
 ```
 
-### frame
-
-Decorative frame with background and border.
-
-```xml
-<frame x="50" y="50" width="300" height="100" 
-       bg="0,0,0,180" 
-       outline="255,255,255,100" 
-       cr="10"/>
-```
-
 ---
 
-## Complete Configuration : Karting Layout
-
-Complete karting layout example:
+## Configuration Complète : Layout Karting
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <layout>
-    <!-- Speed + gauge block -->
-    <composite x="1720" y="780" name="speed_rpm_block">
-        <!-- Speed gauge -->
-        <component type="msi" metric="speed" units="kph" 
-                   x="0" y="0" size="180" 
-                   end="120" yellow="100" green="80" needle="1"/>
-        
-        <!-- Speed number -->
-        <component type="metric" metric="speed" units="kph" dp="0" 
-                   x="90" y="140" size="40" align="centre"/>
-        
-        <!-- Gear -->
-        <component type="custom_calc" 
-                   expression="f'{int(gear)}' if gear > 0 else 'N'" 
-                   x="90" y="45" size="30" align="centre"/>
-        
-        <!-- RPM bar -->
-        <component type="rpm_bar" 
-                   x="0" y="200" 
-                   width="300" height="50" 
-                   segments="24" max_rpm="15000"/>
+  <!-- Date -->
+  <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="18" x="20" y="20"/>
+
+  <!-- Heart Rate -->
+  <composite x="1780" y="20">
+    <component type="icon" x="0" y="0" size="32" file="heart.png"/>
+    <component type="metric" x="40" y="5" metric="hr" dp="0" size="28"/>
+    <component type="metric_unit" metric="hr" x="90" y="5" size="18">{:~P}</component>
+  </composite>
+
+  <!-- Tableau des tours -->
+  <component type="lap_times_table"
+             x="25" y="60"
+             width="380"
+             max_laps="8"
+             size="18"
+             show_best="true"
+             show_max_speed="true"/>
+
+  <!-- Chronomètre -->
+  <component type="lap_chronometer"
+             x="800" y="50"
+             width="280" height="100"
+             size="20"
+             show_lap_number="true"/>
+
+  <!-- Vitesse + RPM -->
+  <composite x="1650" y="600">
+    <!-- Températures -->
+    <composite x="0" y="120">
+      <component type="icon" x="0" y="0" size="36" file="thermometer-1.png"/>
+      <component type="metric" x="30" y="5" metric="temp" dp="0" size="22"/>
+      <component type="text" x="65" y="5" size="16">°C</component>
+      
+      <component type="icon" x="100" y="0" size="36" file="exhaust.png"/>
+      <component type="metric" x="140" y="5" metric="exhaust_temp" dp="0" size="22"/>
+      <component type="text" x="180" y="5" size="16">°C</component>
     </composite>
 
-    <!-- G-Force -->
-    <component type="gforce" 
-               x="1600" y="50" 
-               size="300" max_g="2.5"/>
+    <!-- Jauge vitesse -->
+    <composite x="0" y="180">
+      <component type="msi" metric="speed" units="kph" size="200"
+                 end="120" yellow="100" green="80" needle="1"/>
+      <component type="metric" metric="calculated_gear" x="100" y="45" size="30" dp="0"/>
+      <component type="metric" metric="speed" units="kph" dp="0" size="40" x="100" y="140"/>
+      <component type="metric_unit" metric="speed" units="kph" size="18"
+                 x="120" y="178">{:~P}</component>
+    </composite>
 
-    <!-- Chronometer -->
-    <component type="lap_chronometer" 
-               x="800" y="50" 
-               width="280" height="100" size="20"/>
+    <!-- Barre RPM -->
+    <component type="rpm_bar"
+               x="15" y="400"
+               width="400" height="50"
+               segments="17"
+               max_rpm="15000"
+               size="20"/>
+  </composite>
 
-    <!-- Lap times table -->
-    <component type="lap_times_table" 
-               x="30" y="300" 
-               width="280" max_laps="8" size="18"/>
+  <!-- G-Force -->
+  <component type="gforce_circle"
+             x="30" y="680"
+             size="180"
+             max_g="3"/>
 
-    <!-- GPS map -->
-    <component type="map" 
-               x="50" y="700" 
-               size="300" zoom="17" corner="10"/>
-
-    <!-- Session info -->
-    <component type="custom_calc" 
-               expression="f'Max: {precalc.get(\"max_speed\", 0):.0f} km/h'" 
-               x="1000" y="1000" size="20"/>
+  <!-- Carte -->
+  <translate x="20" y="850">
+    <component type="moving_map" size="200" rotate="false" corner_radius="20"/>
+  </translate>
 </layout>
 ```
 
 ---
 
-## Python Functions
+## Données GPX Requises
 
-### math Module
-```python
-math.sqrt(x)      # Square root
-math.pow(x, y)    # Power
-math.floor(x)     # Floor
-math.ceil(x)      # Ceiling
+Pour utiliser ces widgets, votre fichier GPX doit contenir les extensions suivantes :
+
+### Extensions TrackPointExtension (namespace `gpxtpx`)
+
+```xml
+<gpxtpx:TrackPointExtension>
+  <gpxtpx:speed>13.203083</gpxtpx:speed>
+  <gpxtpx:hr>142</gpxtpx:hr>
+  <gpxtpx:cad>10649</gpxtpx:cad>
+  <gpxtpx:atemp>42.84</gpxtpx:atemp>
+  <gpxtpx:exhaust_temp>265.84</gpxtpx:exhaust_temp>
+  <gpxtpx:calculated_gear>1</gpxtpx:calculated_gear>
+  <gpxtpx:vspeed>0.125000</gpxtpx:vspeed>
+  
+  <!-- Données de tour -->
+  <gpxtpx:lap>1</gpxtpx:lap>
+  <gpxtpx:laptime>53.064</gpxtpx:laptime>
+  <gpxtpx:laptime_str>0:53.064</gpxtpx:laptime_str>
+  <gpxtpx:laptype>TIMED</gpxtpx:laptype>
+</gpxtpx:TrackPointExtension>
 ```
 
-### Formatting Functions
-```python
-format_speed(120.5)     # → "120 km/h"
-format_temp(78.3)       # → "78°C"
-format_rpm(12450)       # → "12450 RPM"
-format_g(2.34)          # → "2.3g"
-format_laptime(41.045)  # → "0:41.045"
-```
+### Extensions Acceleration/Gyroscope (namespace `gpxpx`)
 
-### Conditional Operators
-```python
-# Ternary
-result = "Fast" if speed > 100 else "Slow"
+```xml
+<gpxpx:Acceleration>
+  <gpxpx:x>0.090300</gpxpx:x>
+  <gpxpx:y>-0.415000</gpxpx:y>
+  <gpxpx:z>-1.238800</gpxpx:z>
+</gpxpx:Acceleration>
 
-# Default value
-value = laptime if laptime else 0
-
-# Dictionary get with default
-max_speed = precalc.get('max_speed', 0)
+<gpxpx:Gyroscope>
+  <gpxpx:x>0.123456</gpxpx:x>
+  <gpxpx:y>0.234567</gpxpx:y>
+  <gpxpx:z>0.345678</gpxpx:z>
+</gpxpx:Gyroscope>
 ```
 
 ---
 
-## Tips & Best Practices
+## Conseils & Bonnes Pratiques
 
-### 1. Layout Organization
-- Use `<composite>` to group related widgets
-- Name your composites (`name="speed_block"`) for easier maintenance
+### 1. Organisation du Layout
+
+- Utilisez `<composite>` pour grouper les widgets liés
+- Nommez vos composites (`name="speed_block"`) pour faciliter la maintenance
+- Commentez votre XML
 
 ### 2. Performance
-- Limit visible widgets simultaneously
-- Use reasonable `max_laps` for `lap_times_table` (8-10 max)
-- Charts (`chart`) with too many `samples` can slow down
 
-### 3. Readability
-- Always add black `stroke` (outline) on white text
-- Use semi-transparent backgrounds: `bg="0,0,0,180"`
-- Consistent spacing: multiples of 10 or 20px
+- Limitez le nombre de widgets à l'écran
+- Utilisez `dp` (décimales) raisonnablement
+- Évitez les expressions complexes dans `custom_calc`
+- `max_laps` raisonnable pour `lap_times_table` (8-10 max)
 
-### 4. Resolutions
-- **1080p**: 16-24px for text, 180-200px for gauges
-- **4K**: Double all values
-- Test on target resolution!
+### 3. Lisibilité
 
-### 5. Karting Data
-- `rpm` is mapped to `cad` in GPX
-- Calculated `gear` is stored in `calculated_gear`
-- Laps: `lap`, `laptime`, `laptype` are available
+- Ajoutez toujours un `stroke` (contour noir) sur le texte blanc
+- Utilisez des fonds semi-transparents : `bg_colour="0,0,0,180"`
+- Espacement cohérent : multiples de 10 ou 20px
+- Tailles de police cohérentes
 
----
+### 4. Résolutions
 
-## Troubleshooting
+- **1080p** : 16-24px pour texte, 180-200px pour jauges
+- **4K** : Doublez toutes les valeurs
+- Testez sur la résolution cible !
 
-### Widget not displaying
-1. Check type is correct: `type="rpm_bar"`
-2. Check coordinates: are they within video frame?
-3. Add debug prints in widget
+### 5. Données Karting
 
-### "attribute not found" error
-- Ensure attribute exists in `@allow_attributes`
-- Check factory in `layout_xml.py`
-
-### Incorrect values
-- Check mapping in GPX (rpm → cad, etc.)
-- Use `custom_calc` with prints to debug
-
-### Slow performance
-- Reduce `segments` in `rpm_bar`
-- Reduce `max_laps` in `lap_times_table`
-- Disable unused features
+- `rpm` est mappé sur `cad` dans le GPX
+- Le `calculated_gear` est calculé depuis le rapport
+- Tours : `lap`, `laptime`, `laptype` disponibles
+- Vitesse verticale : `vspeed` en m/s (multiplier par 60 pour m/min)
 
 ---
 
-## Complete Layout Examples
+## Dépannage
 
-See files:
-- `layout_karting_1080.xml` - Karting configuration 1080p
-- `layout_paragliding_1080.xml` - Paragliding configuration
-- `examples/layout/` - Official examples
+### Widget ne s'affiche pas
+
+1. Vérifiez le type : `type="rpm_bar"`
+2. Vérifiez les coordonnées : dans le cadre vidéo ?
+3. Ajoutez des prints de debug dans le widget
+4. Vérifiez que les données GPX sont présentes
+
+### Erreur "attribute not found"
+
+- Assurez-vous que l'attribut existe dans `@allow_attributes`
+- Vérifiez la factory dans `layout_xml.py`
+
+### Valeurs incorrectes
+
+- Vérifiez le mapping dans GPX (rpm → cad, etc.)
+- Utilisez `custom_calc` avec prints pour débugger
+- Vérifiez les unités (m/s vs km/h, etc.)
+
+### Performance lente
+
+- Réduisez `segments` dans `rpm_bar`
+- Réduisez `max_laps` dans `lap_times_table`
+- Désactivez les fonctionnalités inutilisées
+- Simplifiez les expressions `custom_calc`
+
+### Vitesse verticale toujours à 0
+
+- Vérifiez que `vspeed` est dans le GPX
+- Vérifiez que `gpx.py` parse `vspeed`
+- Vérifiez la conversion m/s (valeurs très petites)
 
 ---
 
-**Version**: 1.0.0  
-**Date**: December 31, 2025  
-**Author**: Vincent Capicotto (@capic2)  
-**Project**: [github.com/capic2/gopro-dashboard-overlay](https://github.com/capic2/gopro-dashboard-overlay)
+## Scripts Utiles
+
+### Conversion MyChron CSV → GPX
+
+```bash
+python mychron_to_gpx.py session.csv --merge-gpx gopro.gpx
+```
+
+### Merge OSV (accéléromètre GoPro) + GPX
+
+```bash
+python osv_merge_gpx.py video.OSV track.gpx merged.gpx
+```
+
+### Génération overlay
+
+```bash
+gopro-dashboard.py --gpx merged.gpx --input video.MP4 --output overlay.MP4 --layout karting.xml
+```
+
+---
+
+**Version** : 2.0  
+**Dernière mise à jour** : 02/01/2026  
+**Auteur** : Vincent Capicotto (@capic2)  
+**Projet** : [github.com/capic2/gopro-dashboard-overlay](https://github.com/capic2/gopro-dashboard-overlay)
