@@ -8,6 +8,87 @@ import csv
 from datetime import datetime, timedelta, timezone
 import sys
 import os
+import subprocess
+import json
+
+
+def parse_osv_timing(osv_file):
+    """
+    Extrait le CreateDate de l'OSV pour synchronisation
+    Returns: (create_datetime, duration_seconds)
+    """
+    print(f"\n🎥 Lecture OSV pour synchronisation : {osv_file}")
+
+    try:
+        result = subprocess.run([
+            'exiftool',
+            '-ee',
+            '-G3',
+            '-api', 'LargeFileSupport=1',
+            '-CreateDate',
+            '-Duration',
+            '-json',
+            osv_file
+        ], capture_output=True, text=True, timeout=30)
+
+        if result.returncode != 0:
+            print(f"❌ Erreur exiftool: {result.stderr}")
+            return None, None
+
+        data = json.loads(result.stdout)
+
+        if not data:
+            return None, None
+
+        metadata = data[0]
+
+        # Extraire CreateDate
+        create_date = None
+        for key in metadata.keys():
+            if 'CreateDate' in key or 'Create Date' in key:
+                try:
+                    time_str = metadata[key]
+                    print(f"   🕐 CreateDate OSV: {time_str}")
+
+                    # Format: "YYYY:MM:DD HH:MM:SS"
+                    create_date = datetime.strptime(time_str, '%Y:%m:%d %H:%M:%S')
+                    create_date = create_date.replace(tzinfo=timezone.utc)
+                    break
+                except Exception as e:
+                    print(f"   ⚠️  Erreur parsing CreateDate: {e}")
+
+        # Extraire Duration
+        duration = None
+        if 'Duration' in metadata:
+            duration_str = metadata['Duration']
+            print(f"   ⏱️  Durée OSV: {duration_str}")
+
+            try:
+                parts = duration_str.split(':')
+                if len(parts) == 3:
+                    hours, minutes, seconds = parts
+                    duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                elif len(parts) == 2:
+                    minutes, seconds = parts
+                    duration = int(minutes) * 60 + float(seconds)
+                else:
+                    duration = float(duration_str)
+            except:
+                pass
+
+        if create_date:
+            print(f"   ✅ OSV synchronisé: {create_date}")
+            return create_date, duration
+        else:
+            print("   ❌ Impossible d'extraire CreateDate de l'OSV")
+            return None, None
+
+    except FileNotFoundError:
+        print(f"❌ exiftool non trouvé - installez-le pour la synchronisation OSV")
+        return None, None
+    except Exception as e:
+        print(f"❌ Erreur lecture OSV : {e}")
+        return None, None
 
 
 def parse_external_gpx_hr(gpx_file):
@@ -269,7 +350,7 @@ def parse_datetime_from_metadata(metadata):
         return None
 
 
-def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None):
+def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None, osv_file=None):
     """
     Convertit un CSV MyChron 5 en GPX avec extensions Garmin et données de tours
 
@@ -278,12 +359,23 @@ def mychron_to_gpx(csv_file, output_gpx, start_datetime=None, external_gpx=None)
         output_gpx: Fichier GPX de sortie
         start_datetime: Datetime de départ (optionnel)
         external_gpx: GPX externe pour merger heart rate (optionnel)
+        osv_file: Fichier OSV pour synchronisation temporelle (optionnel)
     """
     print(f"\n📂 Lecture du fichier : {csv_file}")
 
     # Parse métadonnées
     metadata = parse_mychron_metadata(csv_file)
 
+    # ✅ SYNCHRONISATION OSV
+    if osv_file and os.path.exists(osv_file):
+        osv_create_date, osv_duration = parse_osv_timing(osv_file)
+        if osv_create_date is not None:
+            print(f"\n🎯 Synchronisation OSV activée")
+            start_datetime = osv_create_date
+        else:
+            print(f"   ⚠️  Synchronisation OSV échouée, utilisation date MyChron")
+
+    # Fallback sur date MyChron
     if start_datetime is None:
         start_datetime = parse_datetime_from_metadata(metadata)
 
@@ -479,22 +571,30 @@ def print_usage():
     print("""
 ╔════════════════════════════════════════════════════════════════╗
 ║  MyChron 5 → GPX Converter (pour gopro-dashboard-overlay)     ║
-║  Version 3.3 - Avec gestion des tours + Heart Rate externe    ║
+║  Version 3.4 - Tours + Heart Rate + Sync OSV                  ║
 ╚════════════════════════════════════════════════════════════════╝
 
 Usage:
-    python mychron_to_gpx.py <mychron.csv> [external.gpx]
+    python mychron_to_gpx.py <mychron.csv> [external.gpx] [video.OSV]
 
 Arguments:
     mychron.csv     Fichier CSV MyChron (requis)
     external.gpx    GPX externe pour heart rate (optionnel)
+    video.OSV       Fichier OSV pour synchronisation (optionnel)
 
 Exemples:
-    # Sans heart rate
+    # Basique
     python mychron_to_gpx.py 8.csv
 
-    # Avec heart rate Amazfit
+    # Avec heart rate
     python mychron_to_gpx.py 8.csv amazfit.gpx
+
+    # Avec synchronisation OSV
+    python mychron_to_gpx.py 8.csv video.OSV
+
+    # Complet : HR + OSV
+    python mychron_to_gpx.py 8.csv amazfit.gpx video.OSV
+    python mychron_to_gpx.py 8.csv video.OSV amazfit.gpx  # ordre flexible
     """)
 
 
@@ -505,10 +605,26 @@ if __name__ == "__main__":
 
     mychron_csv = sys.argv[1]
     external_gpx = None
+    osv_file = None
 
-    # Si un deuxième fichier est fourni, c'est le GPX externe
+    # Si un deuxième fichier est fourni
     if len(sys.argv) >= 3:
-        external_gpx = sys.argv[2]
+        second_file = sys.argv[2]
+        # Déterminer si c'est un GPX ou un OSV
+        if second_file.lower().endswith('.gpx'):
+            external_gpx = second_file
+        elif second_file.lower().endswith('.osv'):
+            osv_file = second_file
+        else:
+            print(f"⚠️  Format de fichier inconnu : {second_file}")
+
+    # Si un troisième fichier est fourni
+    if len(sys.argv) >= 4:
+        third_file = sys.argv[3]
+        if third_file.lower().endswith('.gpx') and external_gpx is None:
+            external_gpx = third_file
+        elif third_file.lower().endswith('.osv') and osv_file is None:
+            osv_file = third_file
 
     if not os.path.exists(mychron_csv):
         print(f"❌ Fichier CSV introuvable : {mychron_csv}")
@@ -518,39 +634,25 @@ if __name__ == "__main__":
         print(f"⚠️  GPX externe introuvable : {external_gpx} - ignoré")
         external_gpx = None
 
+    if osv_file and not os.path.exists(osv_file):
+        print(f"⚠️  Fichier OSV introuvable : {osv_file} - ignoré")
+        osv_file = None
+
     base_name = os.path.splitext(mychron_csv)[0]
     output_gpx = f"{base_name}.gpx"
 
     print("\n" + "=" * 70)
-    print("🏁 MyChron 5 → GPX Converter v3.3".center(70))
+    print("🏁 MyChron 5 → GPX Converter v3.4".center(70))
+    if osv_file:
+        print("🎥 Mode : Synchronisation OSV".center(70))
     if external_gpx:
         print("💓 Mode : Avec Heart Rate externe".center(70))
     print("=" * 70)
 
     # Conversion
-    result_gpx, point_count = mychron_to_gpx(mychron_csv, output_gpx, external_gpx=external_gpx)
-
-    if point_count == 0:
-        print("\n❌ Aucun point GPS valide trouvé")
-        sys.exit(1)
-
-    # Résumé
-    print("\n" + "=" * 70)
-    print("🎉 Conversion terminée !".center(70))
-    print("=" * 70)
-    print(f"\n📁 Fichier : {result_gpx}")
-    print(f"📊 Points  : {point_count}")
-
-    print("\n" + "-" * 70)
-    print("💡 Données disponibles :")
-    print("-" * 70)
-    print("  • speed      - Vitesse GPS")
-    print("  • temp       - Température eau")
-    print("  • cadence    - RPM moteur")
-    if external_gpx:
-        print("  • hr         - Heart rate (externe)")
-    print("  • accl.x/y/z - Accélérations (g)")
-    print("  • lap        - Numéro de tour")
-    print("  • laptime    - Temps du tour (s)")
-    print("  • laptype    - Type (OUT/TIMED/IN)")
-    print("\n" + "=" * 70 + "\n")
+    result_gpx, point_count = mychron_to_gpx(
+        mychron_csv,
+        output_gpx,
+        external_gpx=external_gpx,
+        osv_file=osv_file
+    )
