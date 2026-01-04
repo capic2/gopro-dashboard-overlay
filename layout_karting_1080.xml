@@ -1,7 +1,7 @@
 <layout>
 
     <!-- Date -->
-    <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="18" x="20" y="20"/>
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="32" x="20" y="20"/>
 
     <!-- ==================== HEART RATE - Haut droite ==================== -->
     <composite x="1780" y="20" name="heart_rate">
