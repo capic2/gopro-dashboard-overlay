@@ -23,7 +23,7 @@ def add_overlay(gpx_path):
     layout_path = input("Taper le chemin du fichier layout\n")
     output_path = input("Taper le chemin du fichier de sortie\n")
     os.system(
-        f"bin/gopro-dashboard.py --use-gpx-only --gpx {gpx_path} --layout xml --layout-xml {layout_path} {mp4_path} {output_path}")
+        f"venv/bin/gopro-dashboard.py --use-gpx-only --gpx {gpx_path} --layout xml --layout-xml {layout_path} {mp4_path} {output_path}")
 
 
 def main():
