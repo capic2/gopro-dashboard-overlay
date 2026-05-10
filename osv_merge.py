@@ -88,6 +88,74 @@ def resolve_osv_timezone(osv_timezone=None, osv_utc_offset=None):
     return timezone.utc, "UTC"
 
 
+def format_utc_offset(total_minutes):
+    sign = '+' if total_minutes >= 0 else '-'
+    total_minutes = abs(total_minutes)
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    return f"UTC{sign}{hours:02d}:{minutes:02d}"
+
+
+def overlap_seconds(start_a, end_a, start_b, end_b):
+    start = max(start_a, start_b)
+    end = min(end_a, end_b)
+    return max(0.0, (end - start).total_seconds())
+
+
+def auto_align_osv_time(osv_points, gpx_points):
+    """
+    Choisit automatiquement l'interprétation timezone OSV qui maximise le chevauchement GPX.
+
+    Les points OSV sont initialement construits comme si CreateDate était en UTC. Pour tester un
+    CreateDate à UTC+01:00, on décale donc les points OSV d'une heure vers le passé.
+    """
+    if not osv_points or not gpx_points:
+        return
+
+    original_osv_start = osv_points[0]['time']
+    original_osv_end = osv_points[-1]['time']
+    gpx_start = gpx_points[0]['time']
+    gpx_end = gpx_points[-1]['time']
+
+    candidates = []
+    for offset_minutes in range(-12 * 60, 14 * 60 + 1, 15):
+        shift = timedelta(minutes=-offset_minutes)
+        candidate_start = original_osv_start + shift
+        candidate_end = original_osv_end + shift
+        overlap = overlap_seconds(candidate_start, candidate_end, gpx_start, gpx_end)
+        candidates.append({
+            'offset_minutes': offset_minutes,
+            'shift': shift,
+            'start': candidate_start,
+            'end': candidate_end,
+            'overlap': overlap,
+        })
+
+    candidates.sort(key=lambda c: (c['overlap'], -abs(c['offset_minutes'])), reverse=True)
+    best = candidates[0]
+
+    print("   🔎 Auto timing OSV: recherche du meilleur chevauchement GPX")
+    if best['overlap'] <= 0:
+        print("   ⚠️  Aucun offset automatique ne crée de chevauchement OSV/GPX")
+        for candidate in candidates[:5]:
+            print(
+                f"      {format_utc_offset(candidate['offset_minutes'])}: "
+                f"overlap={candidate['overlap']:.1f}s, "
+                f"OSV={candidate['start']} → {candidate['end']}"
+            )
+        return
+
+    if best['shift'].total_seconds() != 0:
+        for osv_point in osv_points:
+            osv_point['time'] = osv_point['time'] + best['shift']
+
+    print(
+        f"   ✅ Auto timing OSV choisi: {format_utc_offset(best['offset_minutes'])} "
+        f"(chevauchement {best['overlap']:.1f}s)"
+    )
+    print(f"   📍 OSV recalé: {osv_points[0]['time']} → {osv_points[-1]['time']}")
+
+
 def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     """
     Extrait les données d'un OSV avec Sample Time en secondes
@@ -294,7 +362,7 @@ def parse_gpx(gpx_file):
     return points
 
 
-def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0, sync_mode='absolute'):
+def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0, sync_mode='absolute', auto_osv_time=False):
     """
     Enrichit les points GPX avec les données OSV quand disponibles
     Synchronise automatiquement basé sur les timestamps GPS
@@ -323,6 +391,8 @@ def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0, sync_mode=
         for osv_point in osv_points:
             relative_time = osv_point['timestamp_offset'] - osv_first_sample_time
             osv_point['time'] = gpx_start + timedelta(seconds=relative_time)
+    elif sync_mode == 'absolute' and auto_osv_time:
+        auto_align_osv_time(osv_points, gpx_points)
     elif sync_mode != 'absolute':
         print(f"   ❌ Mode synchro inconnu: {sync_mode}")
         return []
@@ -592,8 +662,8 @@ def main():
     )
     parser.add_argument(
         '--osv-timezone',
-        default=None,
-        help="Timezone du CreateDate OSV si DJI stocke une heure locale, ex: Europe/Paris",
+        default='auto',
+        help="Timezone du CreateDate OSV, ex: Europe/Paris. 'auto' choisit l'offset qui chevauche le mieux le GPX",
     )
     parser.add_argument(
         '--osv-utc-offset',
@@ -604,6 +674,8 @@ def main():
     args = parser.parse_args()
 
     osv_file = args.osv_file
+    auto_osv_time = args.osv_timezone == 'auto' and args.osv_utc_offset is None
+    osv_timezone = None if args.osv_timezone == 'auto' else args.osv_timezone
 
     # MODE 1 : Extraction OSV uniquement
     if args.osv_only:
@@ -616,7 +688,7 @@ def main():
         # Extraire données OSV
         osv_points = extract_osv_data(
             osv_file,
-            osv_timezone=args.osv_timezone,
+            osv_timezone=osv_timezone,
             osv_utc_offset=args.osv_utc_offset,
         )
 
@@ -657,7 +729,7 @@ def main():
     # 1. Extraire données OSV
     osv_points = extract_osv_data(
         osv_file,
-        osv_timezone=args.osv_timezone,
+        osv_timezone=osv_timezone,
         osv_utc_offset=args.osv_utc_offset,
     )
 
@@ -673,7 +745,13 @@ def main():
         sys.exit(1)
 
     # 3. Fusionner
-    merged_points = merge_by_timestamp(osv_points, gpx_points, tolerance, sync_mode=args.sync)
+    merged_points = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        tolerance,
+        sync_mode=args.sync,
+        auto_osv_time=auto_osv_time,
+    )
 
     if not merged_points:
         print("❌ Aucun point fusionné - vérifie les plages temporelles ou utilise --sync gpx-start si tu veux l'ancien comportement")
