@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
+import argparse
 import subprocess
 import json
+import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
 
 
 def parse_time_value(value):
@@ -42,13 +48,59 @@ def parse_time_value(value):
     return None
 
 
-def extract_osv_data(osv_file):
+def parse_utc_offset(value):
+    """Parse un offset de type +02:00 ou -0130."""
+    if value is None:
+        return None
+
+    value = value.strip()
+    if not value or value[0] not in '+-':
+        raise ValueError("l'offset doit commencer par + ou -, ex: +02:00")
+
+    sign = 1 if value[0] == '+' else -1
+    raw = value[1:].replace(':', '')
+    if len(raw) not in (2, 4) or not raw.isdigit():
+        raise ValueError("format offset invalide, attendu +HH:MM ou +HHMM")
+
+    hours = int(raw[:2])
+    minutes = int(raw[2:] or '0')
+    if hours > 23 or minutes > 59:
+        raise ValueError("offset timezone invalide")
+
+    return timezone(sign * timedelta(hours=hours, minutes=minutes))
+
+
+def resolve_osv_timezone(osv_timezone=None, osv_utc_offset=None):
+    if osv_timezone and osv_utc_offset:
+        raise ValueError("utilise soit --osv-timezone soit --osv-utc-offset, pas les deux")
+
+    if osv_utc_offset:
+        return parse_utc_offset(osv_utc_offset), osv_utc_offset
+
+    if osv_timezone:
+        if ZoneInfo is None:
+            raise ValueError("zoneinfo indisponible sur cette version de Python")
+        try:
+            return ZoneInfo(osv_timezone), osv_timezone
+        except Exception as e:
+            raise ValueError(f"timezone inconnue: {osv_timezone}") from e
+
+    return timezone.utc, "UTC"
+
+
+def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     """
     Extrait les données d'un OSV avec Sample Time en secondes
     """
-    from datetime import timezone
-
     print(f"🔍 Extraction de {osv_file}...")
+
+    try:
+        create_date_tz, create_date_tz_label = resolve_osv_timezone(osv_timezone, osv_utc_offset)
+    except ValueError as e:
+        print(f"❌ Timezone OSV invalide: {e}")
+        return []
+
+    print(f"   🌍 Timezone CreateDate OSV: {create_date_tz_label}")
 
     # Extraire avec exiftool AVEC -G3 pour avoir Doc1:ChampName
     result = subprocess.run([
@@ -101,8 +153,8 @@ def extract_osv_data(osv_file):
 
                 # Format: "YYYY:MM:DD HH:MM:SS"
                 base_time = datetime.strptime(time_str, '%Y:%m:%d %H:%M:%S')
-                base_time = base_time.replace(tzinfo=timezone.utc)
-                print(f"   ✅ Base time: {base_time}")
+                base_time = base_time.replace(tzinfo=create_date_tz).astimezone(timezone.utc)
+                print(f"   ✅ Base time UTC: {base_time}")
                 break
             except Exception as e:
                 print(f"   ⚠️  Erreur parsing {key}: {e}")
@@ -242,13 +294,14 @@ def parse_gpx(gpx_file):
     return points
 
 
-def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0):
+def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0, sync_mode='absolute'):
     """
     Enrichit les points GPX avec les données OSV quand disponibles
     Synchronise automatiquement basé sur les timestamps GPS
     """
     print(f"\n🔗 Fusion des données...")
     print(f"   Tolérance: {tolerance_seconds}s")
+    print(f"   Mode synchro: {sync_mode}")
 
     if not gpx_points:
         print("   ❌ Pas de points GPX")
@@ -258,30 +311,28 @@ def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0):
         print("   ⚠️  Pas de données OSV - GPX sans enrichissement")
         return gpx_points
 
-    # ✅ SYNCHRONISATION AUTOMATIQUE
-    # On prend le premier point GPS du GPX comme référence
     gpx_start = gpx_points[0]['time']
-    osv_first_sample_time = osv_points[0]['timestamp_offset']  # Offset en secondes depuis CreateDate
 
-    print(f"   📅 GPX premier point GPS: {gpx_start}")
-    print(f"   📅 OSV premier sample: {osv_first_sample_time:.2f}s après CreateDate")
+    if sync_mode == 'gpx-start':
+        # Ancien comportement: le premier sample OSV est forcé sur le premier point GPX.
+        osv_first_sample_time = osv_points[0]['timestamp_offset']
 
-    # ✅ Recaler tous les points OSV sur le timestamp GPS
-    # On suppose que le premier sample OSV correspond au premier point GPX
-    from datetime import timedelta
+        print(f"   📅 GPX premier point GPS: {gpx_start}")
+        print(f"   📅 OSV premier sample: {osv_first_sample_time:.2f}s après CreateDate")
 
-    for osv_point in osv_points:
-        # Calculer le temps relatif depuis le premier sample
-        relative_time = osv_point['timestamp_offset'] - osv_first_sample_time
-
-        # Appliquer au timestamp GPS de référence
-        osv_point['time'] = gpx_start + timedelta(seconds=relative_time)
+        for osv_point in osv_points:
+            relative_time = osv_point['timestamp_offset'] - osv_first_sample_time
+            osv_point['time'] = gpx_start + timedelta(seconds=relative_time)
+    elif sync_mode != 'absolute':
+        print(f"   ❌ Mode synchro inconnu: {sync_mode}")
+        return []
 
     osv_start = osv_points[0]['time']
     osv_end = osv_points[-1]['time']
 
     print(f"   ✅ OSV synchronisé: {osv_start} → {osv_end}")
     print(f"   📍 Durée OSV: {(osv_end - osv_start).total_seconds():.1f}s")
+    print(f"   📍 Plage GPX: {gpx_points[0]['time']} → {gpx_points[-1]['time']}")
     print(f"   📍 GPX points total: {len(gpx_points)}")
 
     # Filtrer les points GPX dans la plage temporelle de l'OSV
@@ -296,6 +347,7 @@ def merge_by_timestamp(osv_points, gpx_points, tolerance_seconds=1.0):
     if len(filtered_gpx_points) == 0:
         print("   ⚠️  Aucun point GPX dans la plage temporelle de l'OSV")
         print(f"   💡 GPX plage: {gpx_points[0]['time']} → {gpx_points[-1]['time']}")
+        print(f"   💡 OSV plage: {osv_start} → {osv_end}")
         return []
 
     merged = []
@@ -524,32 +576,49 @@ def generate_gpx_from_osv(points, output_file):
 
 
 def main():
-    import sys
+    parser = argparse.ArgumentParser(
+        description="Fusionne un GPX avec les données capteurs d'un OSV"
+    )
+    parser.add_argument('osv_file', help='Fichier vidéo OSV')
+    parser.add_argument('gpx_file', nargs='?', help='Fichier GPX à enrichir')
+    parser.add_argument('output_file', nargs='?', help='Fichier GPX de sortie')
+    parser.add_argument('tolerance_pos', nargs='?', type=float, help='Tolérance en secondes (compatibilité ancien usage)')
+    parser.add_argument('--tolerance', type=float, default=None, help='Tolérance en secondes pour associer GPX et OSV')
+    parser.add_argument(
+        '--sync',
+        choices=('absolute', 'gpx-start'),
+        default='absolute',
+        help="Mode de synchro: 'absolute' utilise les timestamps réels, 'gpx-start' conserve l'ancien recalage",
+    )
+    parser.add_argument(
+        '--osv-timezone',
+        default=None,
+        help="Timezone du CreateDate OSV si DJI stocke une heure locale, ex: Europe/Paris",
+    )
+    parser.add_argument(
+        '--osv-utc-offset',
+        default=None,
+        help="Offset UTC du CreateDate OSV, ex: +02:00. Alternative à --osv-timezone",
+    )
+    parser.add_argument('--osv-only', action='store_true', help='Extrait seulement les capteurs OSV en GPX')
+    args = parser.parse_args()
 
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  Fusion OSV + GPX:")
-        print("    python osv_merge_gpx.py video.OSV track.gpx [output.gpx] [tolerance]")
-        print("")
-        print("  Extraction OSV uniquement:")
-        print("    python osv_merge_gpx.py video.OSV --osv-only [output.gpx]")
-        print("")
-        print("Arguments:")
-        print("  tolerance : tolérance en secondes pour la correspondance (défaut: 1.0)")
-        sys.exit(1)
-
-    osv_file = sys.argv[1]
+    osv_file = args.osv_file
 
     # MODE 1 : Extraction OSV uniquement
-    if len(sys.argv) >= 3 and sys.argv[2] == '--osv-only':
-        output_file = sys.argv[3] if len(sys.argv) > 3 else 'osv_extracted.gpx'
+    if args.osv_only:
+        output_file = args.output_file or args.gpx_file or 'osv_extracted.gpx'
 
         print("=" * 60)
         print("🚀 EXTRACTION GPX DEPUIS OSV")
         print("=" * 60)
 
         # Extraire données OSV
-        osv_points = extract_osv_data(osv_file)
+        osv_points = extract_osv_data(
+            osv_file,
+            osv_timezone=args.osv_timezone,
+            osv_utc_offset=args.osv_utc_offset,
+        )
 
         if not osv_points:
             print("❌ Aucune donnée OSV extraite")
@@ -572,21 +641,25 @@ def main():
         return
 
     # MODE 2 : Fusion OSV + GPX (mode original)
-    if len(sys.argv) < 3:
+    if not args.gpx_file:
         print("❌ Erreur: fichier GPX manquant")
-        print("Usage: python osv_merge_gpx.py video.OSV track.gpx [output.gpx] [tolerance]")
+        parser.print_usage()
         sys.exit(1)
 
-    gpx_file = sys.argv[2]
-    output_file = sys.argv[3] if len(sys.argv) > 3 else 'merged.gpx'
-    tolerance = float(sys.argv[4]) if len(sys.argv) > 4 else 1.0
+    gpx_file = args.gpx_file
+    output_file = args.output_file or 'merged.gpx'
+    tolerance = args.tolerance if args.tolerance is not None else (args.tolerance_pos if args.tolerance_pos is not None else 1.0)
 
     print("=" * 60)
     print("🚀 FUSION OSV + GPX")
     print("=" * 60)
 
     # 1. Extraire données OSV
-    osv_points = extract_osv_data(osv_file)
+    osv_points = extract_osv_data(
+        osv_file,
+        osv_timezone=args.osv_timezone,
+        osv_utc_offset=args.osv_utc_offset,
+    )
 
     if not osv_points:
         print("❌ Aucune donnée OSV extraite")
@@ -600,7 +673,11 @@ def main():
         sys.exit(1)
 
     # 3. Fusionner
-    merged_points = merge_by_timestamp(osv_points, gpx_points, tolerance)
+    merged_points = merge_by_timestamp(osv_points, gpx_points, tolerance, sync_mode=args.sync)
+
+    if not merged_points:
+        print("❌ Aucun point fusionné - vérifie les plages temporelles ou utilise --sync gpx-start si tu veux l'ancien comportement")
+        sys.exit(1)
 
     # 4. Générer GPX
     generate_gpx(merged_points, output_file)
