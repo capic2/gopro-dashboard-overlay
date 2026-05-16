@@ -42,7 +42,7 @@ def fudge(gpx):
                 }
 
                 for extension in point.extensions:
-                    for child in extension:
+                    for child in extension.iter():
                         tag = child.tag[child.tag.find("}") + 1:] if "}" in child.tag else child.tag
 
                         if not child.text:

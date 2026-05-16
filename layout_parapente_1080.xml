@@ -9,9 +9,14 @@
 
 
     <!-- carte -->
-    <translate x="10" y="850">
+    <!--<translate x="10" y="850">
         <frame width="220" height="220" cr="20">
             <component type="journey_map" size="220" opacity="0.5"/>
+        </frame>
+    </translate>-->
+    <translate x="10" y="850">
+        <frame width="220" height="220" cr="20">
+            <component type="video" size="220" fit="cover" id="pip" offset="0"/>
         </frame>
     </translate>
 

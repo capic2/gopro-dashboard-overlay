@@ -73,7 +73,7 @@
         <composite x="0" y="840" name="vario">
             <component type="text" x="-180" size="40" align="right">m/s</component>
             <component type="icon" x="-160" y="0" file="slope-triangle.png" size="100"/>
-            <component type="custom-calc" x="-180" y="50" dp="2" size="80" align="right" expression="(grad / 10) * (speed / 3.6)"/>
+            <component type="custom-calc" x="-180" y="50" dp="2" size="80" align="right" expression="vspeed"/>
         </composite>
     </composite>
 

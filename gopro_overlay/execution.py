@@ -7,9 +7,10 @@ from gopro_overlay.log import log
 
 class InProcessExecution:
 
-    def __init__(self, redirect=None, popen=subprocess.Popen):
+    def __init__(self, redirect=None, popen=subprocess.Popen, wait_timeout=None):
         self.redirect = redirect
         self.popen = popen
+        self.wait_timeout = wait_timeout
 
     def execute(self, cmd):
         try:
@@ -32,9 +33,15 @@ class InProcessExecution:
                 if not process.stdin.closed:
                     process.stdin.flush()
                     process.stdin.close()
-                # really long wait as FFMPEG processes all the mpeg input file - not sure how to prevent this atm
                 log("Waiting for ffmpeg to complete...")
-                returncode = process.wait(5 * 60)
+                try:
+                    returncode = process.wait(self.wait_timeout)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.terminate()
+                    except Exception:
+                        pass
+                    raise
                 log(f"FFMPEG Exited with status code: {returncode}")
         except FileNotFoundError:
             raise IOError(f"Unable to execute the process - is '{cmd[0]}' installed") from None

@@ -50,7 +50,7 @@ def accepter_from_args(include, exclude):
 
 
 def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude, renderer, timeseries, font,
-                          privacy_zone, profiler, converters: Converters):
+                          privacy_zone, profiler, converters: Converters, ffmpeg_exe: FFMPEG, video: Optional[Path]):
     accepter = accepter_from_args(include, exclude)
 
     if layout_xml:
@@ -61,7 +61,7 @@ def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude
         try:
             return layout_from_xml(
                 load_xml_layout(resource_name), renderer, timeseries, font, privacy_zone, include=accepter,
-                decorator=profiler, converters=converters
+                decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video
             )
         except FileNotFoundError:
             raise IOError(f"Unable to locate bundled layout resource: {resource_name}. "
@@ -72,7 +72,7 @@ def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude
     elif layout == "xml":
         return layout_from_xml(
             load_xml_layout(layout_xml), renderer, timeseries, font, privacy_zone, include=accepter,
-            decorator=profiler, converters=converters
+            decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video
         )
     else:
         raise ValueError(f"Unsupported layout {args.layout_creator}")
@@ -365,7 +365,9 @@ if __name__ == "__main__":
                     font=font,
                     privacy_zone=privacy_zone,
                     profiler=profiler,
-                    converters=unit_converters
+                    converters=unit_converters,
+                    ffmpeg_exe=ffmpeg_exe,
+                    video=args.video
                 )
 
                 overlay = Overlay(framemeta=frame_meta, create_widgets=layout_creator)

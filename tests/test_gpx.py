@@ -12,6 +12,7 @@ from gopro_overlay.framemeta_gpx import merge_gpx_with_gopro, timeseries_to_fram
 from gopro_overlay.gpmf import GPSFix
 from gopro_overlay.gpx import gpx_to_timeseries
 from gopro_overlay.journey import Journey
+from gopro_overlay.layout_xml import metric_accessor_from
 from gopro_overlay.point import Point, BoundingBox
 from gopro_overlay.timeseries import Entry, Timeseries
 from gopro_overlay.timeunits import timeunits
@@ -163,6 +164,47 @@ def test_discussion_85_speed_elevation_from_gpx():
     assert entries[0].speed == units.Quantity(6.86, units.mps)
     assert entries[1].speed == units.Quantity(3.77, units.mps)
     assert entries[2].speed == units.Quantity(0.0, units.mps)
+
+
+def test_vspeed_above_nine_mps_is_preserved():
+    xml = """<gpx
+    xmlns="http://www.topografix.com/GPX/1/1"
+    xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+    version="1.1">
+  <trk>
+    <trkseg>
+      <trkpt lat="1" lon="2">
+        <ele>100</ele>
+        <time>2022-01-01T00:00:00Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:vspeed>10.500000</gpxtpx:vspeed>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="1" lon="2">
+        <ele>100</ele>
+        <time>2022-01-01T00:00:01Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:vspeed>-10.500000</gpxtpx:vspeed>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>"""
+
+    entries = list(gpx.load_xml(xml, units))
+
+    assert entries[0].vspeed == units.Quantity(10.5, units.mps)
+    assert entries[1].vspeed == units.Quantity(-10.5, units.mps)
+
+
+def test_vspeed_metric_accessor():
+    entry = Entry(dt=datetime_of(0), vspeed=units.Quantity(10.5, units.mps))
+
+    assert metric_accessor_from("vspeed")(entry) == units.Quantity(10.5, units.mps)
 
 
 def file_path_of_test_asset(name, in_dir="gpx", allow_missing=False) -> Optional[Path]:
@@ -349,4 +391,3 @@ def test_converting_fit_with_dop_to_framemeta():
     fm = timeseries_to_framemeta(ts, units)
 
     assert fm.frames[timeunits(seconds=0)].dop == units.Quantity(1)
-

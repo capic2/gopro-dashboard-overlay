@@ -3,13 +3,14 @@ import math
 import xml.etree.ElementTree as ET
 from importlib.resources import files, as_file
 from pathlib import Path
-from typing import Callable, Optional, TypeVar, Tuple
+from typing import Callable, Mapping, Optional, TypeVar, Tuple
 
 import pint
 from pint.formatting import format_unit
 
 from gopro_overlay import layouts
 from gopro_overlay.dimensions import Dimension
+from gopro_overlay.ffmpeg import FFMPEG
 from gopro_overlay.framemeta import Window
 from gopro_overlay.layout_components import moving_map, journey_map, text, metric, metric_value
 from gopro_overlay.point import Coordinate
@@ -30,6 +31,7 @@ from .widgets.gradient_bar import GradientBar
 from .widgets.map import MovingJourneyMap, Circuit
 from .widgets.profile import WidgetProfiler
 from .widgets.rpm_bar import RPMBarWidget
+from .widgets.video import Video
 from .widgets.widgets import simple_icon, Translate, Composite, Frame, Widget
 from .widgets.custom_calc import CustomCalcWidget
 from .widgets.gforce import GForceCircle
@@ -110,7 +112,8 @@ class Converters:
 
 
 def layout_from_xml(xml, renderer, framemeta, font, privacy, include=lambda name: True,
-                    decorator: Optional[WidgetProfiler] = None, converters: Converters = Converters()):
+                    decorator: Optional[WidgetProfiler] = None, converters: Converters = Converters(),
+                    ffmpeg: Optional[FFMPEG] = None, video: Optional[Mapping[str, Path]] = None):
     root = ET.fromstring(xml)
 
     fonts = {}
@@ -126,6 +129,8 @@ def layout_from_xml(xml, renderer, framemeta, font, privacy, include=lambda name
         renderer=renderer,
         framemeta=framemeta,
         converters=converters,
+        ffmpeg=ffmpeg if ffmpeg is not None else FFMPEG(),
+        video=video,
     )
 
     def name_of(element):
@@ -287,6 +292,7 @@ def metric_accessor_from(name: str) -> Callable[[Entry], Optional[pint.Quantity]
         "exhaust_temp": lambda e: e.exhaust_temp,
         "gradient": lambda e: e.grad if e.grad is not None else e.cgrad,
         "cgrad": lambda e: e.cgrad,
+        "vspeed": lambda e: e.vspeed,
         "alt": lambda e: e.alt,
         "odo": lambda e: e.odo if e.odo is not None else e.codo,
         "codo": lambda e: e.codo,
@@ -405,12 +411,14 @@ class FloatRange:
 
 class Widgets:
 
-    def __init__(self, font, privacy, renderer, framemeta, converters):
+    def __init__(self, font, privacy, renderer, framemeta, converters, ffmpeg, video):
         self.framemeta = framemeta
         self.renderer = renderer
         self.privacy = privacy
         self.font = font
         self.converters = converters
+        self.ffmpeg = ffmpeg
+        self.video = video or {}
 
     def _font(self, element, name, d):
         return self.font(iattrib(element, name, d=d, r=range(1, 2000)))
@@ -518,6 +526,46 @@ class Widgets:
             marker_fill=rgbattr(element, "loc-fill", d=(0, 0, 255)),
             marker_outline=rgbattr(element, "loc-outline", d=(0, 0, 0)),
             marker_size=iattrib(element, "loc-size", d=6)
+        )
+
+    @allow_attributes({"x", "y", "id", "file", "width", "height", "size", "fit", "offset", "fps", "opacity"})
+    def create_video(self, element: ET.Element, entry, **kwargs) -> Widget:
+        size = iattrib(element, "size", d=None)
+        width = iattrib(element, "width", d=size)
+        height = iattrib(element, "height", d=size)
+        if width is None or height is None:
+            raise ValueError("Video components need either 'size' or both 'width' and 'height'")
+
+        fit = attrib(element, "fit", d="cover")
+        if fit not in {"cover", "contain", "stretch"}:
+            raise ValueError("Video component 'fit' must be one of cover, contain, stretch")
+
+        fps = fattrib(element, "fps", d=10.0)
+        if fps <= 0:
+            raise ValueError("Video component 'fps' must be positive")
+
+        filepath = attrib(element, "file", d=None)
+        if filepath is None:
+            video_id = attrib(element, "id", d=None)
+            if video_id is None:
+                raise ValueError("Video components need either a 'file' attribute or an 'id' matching --video id=file")
+            if video_id not in self.video:
+                raise ValueError(f"Video component id '{video_id}' has no matching --video {video_id}=file")
+            filepath = self.video[video_id]
+        if filepath is None:
+            raise ValueError("Video components need either a 'file' attribute or an 'id' matching --video id=file")
+
+        return Video(
+            at=at(element),
+            entry=entry,
+            start_date=self.framemeta.date_at(self.framemeta.min),
+            file=Path(filepath),
+            dimensions=Dimension(width, height),
+            ffmpeg=self.ffmpeg,
+            offset_seconds=fattrib(element, "offset", d=0.0),
+            fps=fps,
+            fit=fit,
+            opacity=fattrib(element, "opacity", d=1.0, r=FloatRange(0.0, 1.0)),
         )
 
     @allow_attributes({"size", "zoom", "fill", "line-width", "loc-fill", "loc-outline", "loc-size"})

@@ -8,6 +8,10 @@
 
 `python osv_merge.py fichier_video.OSV fichier_montre.gpx merged.gpx`
 
+Pour une longue vidéo découpée en plusieurs fichiers OSV :
+
+`python osv_merge.py fichier_video_001.OSV fichier_video_002.OSV fichier_video_003.OSV fichier_montre.gpx merged.gpx`
+
 ### Karting
 
 `python mychron_to_gpx fichier_mychron.csv fichier_montre.gpx fichier_video.osv`

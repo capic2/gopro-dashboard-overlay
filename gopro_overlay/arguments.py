@@ -76,6 +76,17 @@ class EnumNameAction(argparse.Action):
 default_config_location = pathlib.Path.home() / ".gopro-graphics"
 
 
+def video_arg(value: str):
+    parts = value.split("=", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise argparse.ArgumentTypeError("Video must be in the form id=/path/to/video.mp4")
+    return parts[0], pathlib.Path(parts[1])
+
+
+def video_args(values):
+    return dict(values or [])
+
+
 def gopro_dashboard_arguments(args=None):
     parser = argparse.ArgumentParser(
         description="Overlay gadgets on to GoPro MP4",
@@ -142,6 +153,8 @@ def gopro_dashboard_arguments(args=None):
                         help="Choose graphics layout")
 
     layout.add_argument("--layout-xml", type=pathlib.Path, help="Use XML File for layout")
+    layout.add_argument("--video", type=video_arg, action="append", default=[], metavar="ID=FILE",
+                        help="Video file used by XML video components, repeatable: --video pip=/path/to/pip.mp4")
 
     layout.add_argument("--exclude", nargs="+", help="exclude named component (will include all others")
     layout.add_argument("--include", nargs="+", help="include named component (will exclude all others)")
@@ -192,5 +205,7 @@ def gopro_dashboard_arguments(args=None):
 
     if args.use_gpx_only and args.generate != "default":
         quit("--generate cannot be combined with --use-gpx-only")
+
+    args.video = video_args(args.video)
 
     return args

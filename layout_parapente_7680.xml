@@ -54,7 +54,7 @@
     <composite x="7600" y="1240" name="vario">
        <component type="text" x="-280" size="64" align="right">m/s</component>
        <component type="icon" x="-256" y="0" file="slope-triangle.png" size="160" />
-       <component type="custom-calc" x="-280" y="72" dp="2" size="128" align="right" expression="(grad / 10) * (speed / 3.6)"/>
+       <component type="custom-calc" x="-280" y="72" dp="2" size="128" align="right" expression="vspeed"/>
     </composite>
 
     <!-- carte -->

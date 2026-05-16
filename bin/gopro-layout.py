@@ -12,7 +12,7 @@ from PIL import Image
 from pint import DimensionalityError
 
 from gopro_overlay import fake, geo, timeseries_process
-from gopro_overlay.arguments import default_config_location
+from gopro_overlay.arguments import default_config_location, video_arg, video_args
 from gopro_overlay.assertion import assert_file_exists
 from gopro_overlay.config import Config
 from gopro_overlay.dimensions import dimension_from, Dimension
@@ -53,8 +53,11 @@ if __name__ == "__main__":
     parser.add_argument("--font", help="Selects a font", default="Roboto-Medium.ttf")
     parser.add_argument("--overlay-size", default="1920x1080", help="Size of frame, XxY, e.g. 1920x1080")
     parser.add_argument("--gopro", type=pathlib.Path, help="Use gopro video to supply a background image / journey")
+    parser.add_argument("--video", type=video_arg, action="append", default=[], metavar="ID=FILE",
+                        help="Video file used by XML video components, repeatable: --video pip=/path/to/pip.mp4")
 
     args = parser.parse_args()
+    args.video = video_args(args.video)
 
     config_dir = args.config_dir
     config_dir.mkdir(exist_ok=True)
@@ -123,7 +126,7 @@ if __name__ == "__main__":
 
                     try:
                         layout = layout_from_xml(load_xml_layout(args.file), renderer, timeseries, font,
-                                                 NoPrivacyZone())
+                                                 NoPrivacyZone(), ffmpeg=ffmpeg_gopro.exe, video=args.video)
 
                         overlay = Overlay(
                             framemeta=timeseries,
