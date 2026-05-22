@@ -112,7 +112,7 @@ class Video(Widget):
         if entry is None:
             return
 
-        elapsed = timeunits.from_timedelta(entry.dt - self.start_date) + self.offset
+        elapsed = timeunits(seconds=(entry.dt - self.start_date).total_seconds()) + self.offset
         frame = self.source.frame_at(elapsed.millis() / 1000)
         if frame is None:
             return
