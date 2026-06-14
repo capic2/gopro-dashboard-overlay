@@ -12,9 +12,8 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None
 
 
-VSPEED_WINDOW_SECONDS = 5.0
-VSPEED_SMOOTHING_ALPHA = 0.35
-VSPEED_MAX_ABS_MPS = 5.0
+VSPEED_WINDOW_SECONDS = 1.5
+VSPEED_MAX_ABS_MPS = 15.0
 
 
 def points_duration_seconds(points):
@@ -121,41 +120,40 @@ def clamp(value, min_value, max_value):
     return max(min_value, min(max_value, value))
 
 
-def calculate_vertical_speed(gpx_point, point_history, previous_smoothed):
-    """Calcule un vario stable depuis l'altitude GPX, en limitant les pics GPS/baro."""
+def seconds_between(a, b):
+    return (a['time'] - b['time']).total_seconds()
+
+
+def calculate_vertical_speed(gpx_point, points):
+    """Calcule le vario local avec une regression altitude/temps centree."""
     if gpx_point['ele'] is None:
-        return None, previous_smoothed
+        return None
 
-    target_delta = timedelta(seconds=VSPEED_WINDOW_SECONDS)
-    reference_point = None
-
-    for candidate in reversed(point_history):
+    samples = []
+    for candidate in points:
         if candidate['ele'] is None:
             continue
 
-        if gpx_point['time'] - candidate['time'] >= target_delta:
-            reference_point = candidate
-            break
+        offset = seconds_between(candidate, gpx_point)
+        if abs(offset) <= VSPEED_WINDOW_SECONDS:
+            samples.append((offset, candidate['ele']))
 
-    if reference_point is None:
-        return None, previous_smoothed
+    if len(samples) < 2:
+        return None
 
-    delta_time = (gpx_point['time'] - reference_point['time']).total_seconds()
-    if delta_time <= 0:
-        return None, previous_smoothed
+    mean_time = sum(offset for offset, _ in samples) / len(samples)
+    mean_ele = sum(ele for _, ele in samples) / len(samples)
+    variance_time = sum((offset - mean_time) ** 2 for offset, _ in samples)
+    if variance_time <= 0:
+        return None
 
-    raw_vspeed = (gpx_point['ele'] - reference_point['ele']) / delta_time
-    limited_vspeed = clamp(raw_vspeed, -VSPEED_MAX_ABS_MPS, VSPEED_MAX_ABS_MPS)
+    covariance = sum((offset - mean_time) * (ele - mean_ele) for offset, ele in samples)
+    raw_vspeed = covariance / variance_time
+    return clamp(raw_vspeed, -VSPEED_MAX_ABS_MPS, VSPEED_MAX_ABS_MPS)
 
-    if previous_smoothed is None:
-        smoothed_vspeed = limited_vspeed
-    else:
-        smoothed_vspeed = (
-            VSPEED_SMOOTHING_ALPHA * limited_vspeed
-            + (1.0 - VSPEED_SMOOTHING_ALPHA) * previous_smoothed
-        )
 
-    return smoothed_vspeed, smoothed_vspeed
+def calculate_vertical_speeds(points):
+    return [calculate_vertical_speed(point, points) for point in points]
 
 
 def auto_align_osv_time(osv_points, gpx_points):
@@ -607,8 +605,7 @@ def merge_by_timestamp(
         return []
 
     merged = []
-    point_history = []
-    smoothed_vspeed = None
+    vspeeds = calculate_vertical_speeds(filtered_gpx_points)
 
     if fill_osv_gap or include_osv_only:
         if osv_only_position == 'nearest':
@@ -649,7 +646,7 @@ def merge_by_timestamp(
         merged.extend(before_points)
         print(f"   ➕ Points OSV seuls avant GPX: {len(before_points)}")
 
-    for gpx_point in filtered_gpx_points:
+    for gpx_point, vspeed in zip(filtered_gpx_points, vspeeds):
         gpx_time = gpx_point['time']
 
         merged_point = {
@@ -659,9 +656,6 @@ def merge_by_timestamp(
             'ele': gpx_point['ele'],
             'original_extensions': gpx_point.get('original_extensions'),
         }
-
-        # Calculer une vitesse verticale stable: fenêtre temporelle + lissage + limite anti-pics.
-        vspeed, smoothed_vspeed = calculate_vertical_speed(gpx_point, point_history, smoothed_vspeed)
 
         merged_point['vspeed'] = vspeed
 
@@ -688,11 +682,6 @@ def merge_by_timestamp(
             })
 
         merged.append(merged_point)
-
-        point_history.append({
-            'time': gpx_time,
-            'ele': gpx_point['ele']
-        })
 
     if include_osv_only or forced_end is not None:
         after_start = max(osv_start, gpx_points[-1]['time'] + timedelta(microseconds=1))
@@ -744,7 +733,7 @@ def merge_by_timestamp(
     print(f"   📈 {with_vspeed} avec vitesse verticale calculée")
     if vspeeds:
         print(
-            f"   📈 VSpeed lissée: min={min(vspeeds):.2f} m/s, "
+            f"   📈 VSpeed calculée: min={min(vspeeds):.2f} m/s, "
             f"max={max(vspeeds):.2f} m/s, moy={sum(vspeeds) / len(vspeeds):.2f} m/s"
         )
 
