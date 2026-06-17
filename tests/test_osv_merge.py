@@ -4,12 +4,26 @@ import pytest
 
 from osv_merge import calculate_vertical_speeds
 from osv_merge import default_first_gpx_at
+from osv_merge import merge_by_timestamp
+from osv_merge import points_duration_seconds
+from osv_merge import video_start_time
 
 
 def gpx_point(seconds, ele):
     return {
         'time': datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=seconds),
+        'lat': 47.0,
+        'lon': 6.0,
         'ele': ele,
+    }
+
+
+def osv_point(video_start, seconds):
+    return {
+        'time': video_start + timedelta(seconds=seconds),
+        'video_start': video_start,
+        'timestamp_offset': seconds,
+        'g_force': 1.0,
     }
 
 
@@ -68,3 +82,65 @@ def test_gpx_start_sync_keeps_legacy_first_gpx_offset():
     ]
 
     assert default_first_gpx_at('gpx-start', 548.8, points) == pytest.approx(30.8)
+
+
+def test_osv_duration_starts_at_video_create_date_before_first_sample():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    points = [
+        osv_point(video_start, 8),
+        osv_point(video_start, 548.8),
+    ]
+
+    assert video_start_time(points) == video_start
+    assert points_duration_seconds(points) == pytest.approx(548.8)
+
+
+def test_absolute_sync_trims_gpx_before_video_start():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [
+        osv_point(video_start, 0),
+        osv_point(video_start, 20),
+    ]
+    gpx_points = [
+        gpx_point(-5, 90),
+        gpx_point(0, 100),
+        gpx_point(10, 110),
+        gpx_point(25, 120),
+    ]
+
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=False,
+        video_duration=20,
+    )
+
+    assert [point['time'] for point in merged] == [
+        video_start,
+        video_start + timedelta(seconds=10),
+    ]
+
+
+def test_absolute_sync_fills_when_gpx_starts_after_video_start():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [
+        osv_point(video_start, 8),
+        osv_point(video_start, 20),
+    ]
+    gpx_points = [
+        gpx_point(10, 100),
+        gpx_point(20, 120),
+    ]
+
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=True,
+        video_duration=20,
+    )
+
+    assert merged[0]['time'] == video_start
+    assert merged[0]['source'] == 'static-before'
+    assert merged[-1]['time'] == video_start + timedelta(seconds=20)
