@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from osv_merge import calculate_vertical_speeds
+from osv_merge import default_first_gpx_at
 
 
 def gpx_point(seconds, ele):
@@ -49,3 +50,21 @@ def test_vertical_speed_ignores_missing_altitudes():
     assert vspeeds[0] is None
     assert vspeeds[1] is None
     assert vspeeds[2] is None
+
+
+def test_absolute_sync_does_not_invent_first_gpx_offset():
+    points = [
+        gpx_point(0, 100),
+        gpx_point(518, 120),
+    ]
+
+    assert default_first_gpx_at('absolute', 548.8, points) is None
+
+
+def test_gpx_start_sync_keeps_legacy_first_gpx_offset():
+    points = [
+        gpx_point(0, 100),
+        gpx_point(518, 120),
+    ]
+
+    assert default_first_gpx_at('gpx-start', 548.8, points) == pytest.approx(30.8)

@@ -26,6 +26,14 @@ def points_duration_seconds(points):
     return (points[-1]['time'] - points[0]['time']).total_seconds()
 
 
+def default_first_gpx_at(sync_mode, video_duration, gpx_points):
+    if sync_mode != 'gpx-start':
+        return None
+
+    gpx_duration = points_duration_seconds(gpx_points)
+    return max(0.0, video_duration - gpx_duration)
+
+
 def parse_time_value(value):
     """Parse différents formats de temps et retourne secondes"""
     if value is None:
@@ -1005,7 +1013,7 @@ def main():
         '--first-gpx-at',
         type=float,
         default=None,
-        help="Position en secondes du premier vrai point GPX dans la vidéo. Par défaut: durée vidéo - durée GPX",
+        help="Position en secondes du premier vrai point GPX dans la vidéo. Par défaut: timestamps absolus en mode absolute",
     )
     parser.add_argument('--osv-only', action='store_true', help='Extrait seulement les capteurs OSV en GPX')
     args = parser.parse_args()
@@ -1100,12 +1108,13 @@ def main():
         print(f"   🎬 Durée vidéo auto depuis OSV: {video_duration:.3f}s")
 
     if first_gpx_at is None:
-        gpx_duration = points_duration_seconds(gpx_points)
-        first_gpx_at = max(0.0, video_duration - gpx_duration)
-        print(
-            f"   🎬 Premier GPX auto: +{first_gpx_at:.3f}s "
-            f"(durée vidéo {video_duration:.3f}s - durée GPX {gpx_duration:.3f}s)"
-        )
+        first_gpx_at = default_first_gpx_at(args.sync, video_duration, gpx_points)
+        if first_gpx_at is not None:
+            gpx_duration = points_duration_seconds(gpx_points)
+            print(
+                f"   🎬 Premier GPX auto: +{first_gpx_at:.3f}s "
+                f"(durée vidéo {video_duration:.3f}s - durée GPX {gpx_duration:.3f}s)"
+            )
 
     # 3. Fusionner
     merged_points = merge_by_timestamp(
