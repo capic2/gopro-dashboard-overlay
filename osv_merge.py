@@ -21,7 +21,7 @@ def points_duration_seconds(points):
         return 0.0
 
     if 'timestamp_offset' in points[0] and 'timestamp_offset' in points[-1]:
-        return points[-1]['timestamp_offset'] - points[0]['timestamp_offset']
+        return points[-1]['timestamp_offset']
 
     return (points[-1]['time'] - points[0]['time']).total_seconds()
 
@@ -32,6 +32,11 @@ def default_first_gpx_at(sync_mode, video_duration, gpx_points):
 
     gpx_duration = points_duration_seconds(gpx_points)
     return max(0.0, video_duration - gpx_duration)
+
+
+def video_start_time(points):
+    starts = [point.get('video_start') for point in points if point.get('video_start') is not None]
+    return min(starts) if starts else points[0]['time']
 
 
 def parse_time_value(value):
@@ -210,6 +215,8 @@ def auto_align_osv_time(osv_points, gpx_points):
     if best['shift'].total_seconds() != 0:
         for osv_point in osv_points:
             osv_point['time'] = osv_point['time'] + best['shift']
+            if osv_point.get('video_start') is not None:
+                osv_point['video_start'] = osv_point['video_start'] + best['shift']
 
     print(
         f"   ✅ Auto timing OSV choisi: {format_utc_offset(best['offset_minutes'])} "
@@ -344,6 +351,7 @@ def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
 
         points.append({
             'time': point_time,
+            'video_start': base_time,
             'timestamp_offset': timestamp_seconds,
             'g_force': g_force,
             'accel_x': accel_x,
@@ -390,7 +398,7 @@ def extract_osv_files(osv_files, osv_timezone=None, osv_utc_offset=None):
     if not all_points:
         return []
 
-    first_time = all_points[0]['time']
+    first_time = video_start_time(all_points)
     for point in all_points:
         point['timestamp_offset'] = (point['time'] - first_time).total_seconds()
 
@@ -559,8 +567,8 @@ def merge_by_timestamp(
         return gpx_points
 
     gpx_start = gpx_points[0]['time']
-    forced_start = gpx_start - timedelta(seconds=first_gpx_at) if first_gpx_at is not None else None
-    forced_end = forced_start + timedelta(seconds=video_duration) if forced_start is not None and video_duration is not None else None
+    forced_start = None
+    forced_end = None
 
     if sync_mode == 'gpx-start':
         # Ancien comportement: le premier sample OSV est forcé sur le premier point GPX.
@@ -580,12 +588,22 @@ def merge_by_timestamp(
 
     osv_start = osv_points[0]['time']
     osv_end = osv_points[-1]['time']
+    video_start = video_start_time(osv_points)
+
+    if first_gpx_at is not None:
+        forced_start = gpx_start - timedelta(seconds=first_gpx_at)
+    elif sync_mode == 'absolute':
+        forced_start = video_start
+
+    if forced_start is not None and video_duration is not None:
+        forced_end = forced_start + timedelta(seconds=video_duration)
 
     print(f"   ✅ OSV synchronisé: {osv_start} → {osv_end}")
+    print(f"   🎬 Fenêtre vidéo: {forced_start} → {forced_end}")
     print(f"   📍 Durée OSV: {(osv_end - osv_start).total_seconds():.1f}s")
     print(f"   📍 Plage GPX: {gpx_points[0]['time']} → {gpx_points[-1]['time']}")
     print(f"   📍 GPX points total: {len(gpx_points)}")
-    if forced_start is not None:
+    if first_gpx_at is not None:
         print(f"   🎬 Début vidéo forcé: {forced_start} (premier GPX à +{first_gpx_at:.3f}s)")
     if forced_end is not None:
         print(f"   🎬 Fin vidéo forcée: {forced_end} (durée {video_duration:.3f}s)")
@@ -691,7 +709,7 @@ def merge_by_timestamp(
 
         merged.append(merged_point)
 
-    if include_osv_only or forced_end is not None:
+    if include_osv_only or (forced_end is not None and fill_osv_gap):
         after_start = max(osv_start, gpx_points[-1]['time'] + timedelta(microseconds=1))
         after_end = forced_end if forced_end is not None else osv_end
         after_points = select_osv_only_points(
@@ -719,7 +737,7 @@ def merge_by_timestamp(
     if forced_end is not None and merged:
         merged.sort(key=lambda point: point['time'])
         merged = [point for point in merged if point['time'] <= forced_end]
-        if merged[-1]['time'] < forced_end:
+        if fill_osv_gap and merged[-1]['time'] < forced_end:
             last = merged[-1]
             merged.append(build_static_point(
                 forced_end,
