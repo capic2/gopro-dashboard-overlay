@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import argparse
 import subprocess
 import json
@@ -460,6 +460,18 @@ def parse_gpx(gpx_file):
     print(f"   ✅ {len(points)} points GPX lus")
 
     return points
+
+
+def apply_gpx_offset(gpx_points, offset_seconds):
+    """Decale les timestamps GPX avant la fusion OSV."""
+    if not offset_seconds:
+        return gpx_points
+
+    shift = timedelta(seconds=offset_seconds)
+    for gpx_point in gpx_points:
+        gpx_point['time'] = gpx_point['time'] + shift
+
+    return gpx_points
 
 
 def build_osv_only_point(osv_point, lat=0.0, lon=0.0, ele=None):
@@ -1033,6 +1045,12 @@ def main():
         default=None,
         help="Position en secondes du premier vrai point GPX dans la vidéo. Par défaut: timestamps absolus en mode absolute",
     )
+    parser.add_argument(
+        '--gpx-offset',
+        type=float,
+        default=0.0,
+        help="Decalage en secondes applique aux timestamps GPX avant fusion. Positif retarde le GPX, negatif l'avance",
+    )
     parser.add_argument('--osv-only', action='store_true', help='Extrait seulement les capteurs OSV en GPX')
     args = parser.parse_args()
 
@@ -1117,6 +1135,10 @@ def main():
     if not gpx_points:
         print("❌ Aucun point GPX trouvé")
         sys.exit(1)
+
+    if args.gpx_offset:
+        print(f"   GPX offset: {args.gpx_offset:+.3f}s")
+        apply_gpx_offset(gpx_points, args.gpx_offset)
 
     video_duration = args.video_duration
     first_gpx_at = args.first_gpx_at

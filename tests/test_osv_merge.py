@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from osv_merge import apply_gpx_offset
 from osv_merge import calculate_vertical_speeds
 from osv_merge import default_first_gpx_at
 from osv_merge import merge_by_timestamp
@@ -144,3 +145,53 @@ def test_absolute_sync_fills_when_gpx_starts_after_video_start():
     assert merged[0]['time'] == video_start
     assert merged[0]['source'] == 'static-before'
     assert merged[-1]['time'] == video_start + timedelta(seconds=20)
+
+
+def test_gpx_offset_positive_delays_gpx_and_fills_video_start():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [
+        osv_point(video_start, 0),
+        osv_point(video_start, 10),
+    ]
+    gpx_points = [
+        gpx_point(0, 100),
+        gpx_point(5, 105),
+    ]
+
+    apply_gpx_offset(gpx_points, 3)
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=True,
+        video_duration=10,
+    )
+
+    assert merged[0]['time'] == video_start
+    assert merged[0]['source'] == 'osv-only'
+    assert video_start + timedelta(seconds=3) in [point['time'] for point in merged]
+
+
+def test_gpx_offset_negative_advances_gpx_and_trims_before_video_start():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [
+        osv_point(video_start, 0),
+        osv_point(video_start, 10),
+    ]
+    gpx_points = [
+        gpx_point(2, 100),
+        gpx_point(5, 105),
+    ]
+
+    apply_gpx_offset(gpx_points, -3)
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=False,
+        video_duration=10,
+    )
+
+    assert [point['time'] for point in merged] == [
+        video_start + timedelta(seconds=2),
+    ]
