@@ -654,11 +654,13 @@ def merge_by_timestamp(
     vspeeds = calculate_vertical_speeds(filtered_gpx_points)
 
     if gpx_offset > 0 and forced_start is not None and forced_start < gpx_start:
-        merged.append(build_static_point(
+        merged.extend(select_static_points(
             forced_start,
-            lat=gpx_points[0]['lat'],
-            lon=gpx_points[0]['lon'],
-            ele=gpx_points[0].get('ele'),
+            gpx_start - timedelta(microseconds=1),
+            osv_only_step,
+            gpx_points[0]['lat'],
+            gpx_points[0]['lon'],
+            gpx_points[0].get('ele'),
             source='gpx-offset-fill',
         ))
 
@@ -676,7 +678,7 @@ def merge_by_timestamp(
 
         before_start = forced_start if forced_start is not None else osv_start
         if gpx_offset > 0 and forced_start is not None:
-            before_start = max(before_start, forced_start + timedelta(microseconds=1))
+            before_start = max(before_start, gpx_start)
         before_end = min(forced_end or osv_end, gpx_start - timedelta(microseconds=1))
 
         before_points = []

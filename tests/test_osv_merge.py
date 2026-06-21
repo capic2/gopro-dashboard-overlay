@@ -176,6 +176,33 @@ def test_gpx_offset_positive_delays_gpx_and_fills_video_start():
     assert video_start + timedelta(seconds=3) in [point['time'] for point in merged]
 
 
+def test_gpx_offset_positive_fills_entire_delay_gap():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [osv_point(video_start, second) for second in range(0, 21)]
+    gpx_points = [
+        gpx_point(0, 100),
+        gpx_point(20, 120),
+    ]
+
+    apply_gpx_offset(gpx_points, 14)
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=True,
+        video_duration=20,
+        gpx_offset=14,
+    )
+
+    fill_points = [point for point in merged if point.get('source') == 'gpx-offset-fill']
+
+    assert [point['time'] for point in fill_points] == [
+        video_start + timedelta(seconds=second) for second in range(14)
+    ]
+    assert all(point['lat'] == pytest.approx(47.0) for point in fill_points)
+    assert video_start + timedelta(seconds=14) in [point['time'] for point in merged]
+
+
 def test_gpx_offset_positive_delays_real_gpx_points_only():
     gpx_points = [
         gpx_point(0, 100),
