@@ -168,8 +168,25 @@ def test_gpx_offset_positive_delays_gpx_and_fills_video_start():
     )
 
     assert merged[0]['time'] == video_start
-    assert merged[0]['source'] == 'osv-only'
+    assert merged[0]['lat'] == pytest.approx(47.0)
+    assert merged[0]['lon'] == pytest.approx(6.0)
     assert video_start + timedelta(seconds=3) in [point['time'] for point in merged]
+
+
+def test_gpx_offset_positive_inserts_synthetic_first_gpx_point():
+    gpx_points = [
+        gpx_point(0, 100),
+        gpx_point(5, 105),
+    ]
+
+    apply_gpx_offset(gpx_points, 3)
+
+    assert [point['time'] for point in gpx_points] == [
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=3),
+        datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=8),
+    ]
+    assert gpx_points[0]['source'] == 'gpx-offset-fill'
 
 
 def test_gpx_offset_negative_advances_gpx_and_trims_before_video_start():
