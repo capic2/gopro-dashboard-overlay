@@ -467,9 +467,18 @@ def apply_gpx_offset(gpx_points, offset_seconds):
     if not offset_seconds:
         return gpx_points
 
+    fill_point = None
+    if offset_seconds > 0 and gpx_points:
+        fill_point = gpx_points[0].copy()
+        fill_point['original_extensions'] = None
+        fill_point['source'] = 'gpx-offset-fill'
+
     shift = timedelta(seconds=offset_seconds)
     for gpx_point in gpx_points:
         gpx_point['time'] = gpx_point['time'] + shift
+
+    if fill_point is not None:
+        gpx_points.insert(0, fill_point)
 
     return gpx_points
 
