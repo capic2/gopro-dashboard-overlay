@@ -34,13 +34,6 @@ def default_first_gpx_at(sync_mode, video_duration, gpx_points):
     return max(0.0, video_duration - gpx_duration)
 
 
-def adjusted_first_gpx_at(sync_mode, video_duration, gpx_points, gpx_offset):
-    first_gpx_at = default_first_gpx_at(sync_mode, video_duration, gpx_points)
-    if first_gpx_at is not None and gpx_offset > 0:
-        first_gpx_at += gpx_offset
-    return first_gpx_at
-
-
 def video_start_time(points):
     starts = [point.get('video_start') for point in points if point.get('video_start') is not None]
     return min(starts) if starts else points[0]['time']
@@ -566,7 +559,6 @@ def merge_by_timestamp(
     osv_only_step=1.0,
     video_duration=None,
     first_gpx_at=None,
-    gpx_offset=0.0,
 ):
     """
     Enrichit les points GPX avec les données OSV quand disponibles
@@ -653,17 +645,6 @@ def merge_by_timestamp(
     merged = []
     vspeeds = calculate_vertical_speeds(filtered_gpx_points)
 
-    if gpx_offset > 0 and forced_start is not None and forced_start < gpx_start:
-        merged.extend(select_static_points(
-            forced_start,
-            gpx_start - timedelta(microseconds=1),
-            osv_only_step,
-            gpx_points[0]['lat'],
-            gpx_points[0]['lon'],
-            gpx_points[0].get('ele'),
-            source='gpx-offset-fill',
-        ))
-
     if fill_osv_gap or include_osv_only:
         if osv_only_position == 'nearest':
             before_lat = gpx_points[0]['lat']
@@ -677,8 +658,6 @@ def merge_by_timestamp(
             before_ele = after_ele = None
 
         before_start = forced_start if forced_start is not None else osv_start
-        if gpx_offset > 0 and forced_start is not None:
-            before_start = max(before_start, gpx_start)
         before_end = min(forced_end or osv_end, gpx_start - timedelta(microseconds=1))
 
         before_points = []
@@ -1157,6 +1136,10 @@ def main():
         print("❌ Aucun point GPX trouvé")
         sys.exit(1)
 
+    if args.gpx_offset:
+        print(f"   GPX offset: {args.gpx_offset:+.3f}s")
+        apply_gpx_offset(gpx_points, args.gpx_offset)
+
     video_duration = args.video_duration
     first_gpx_at = args.first_gpx_at
 
@@ -1165,17 +1148,13 @@ def main():
         print(f"   🎬 Durée vidéo auto depuis OSV: {video_duration:.3f}s")
 
     if first_gpx_at is None:
-        first_gpx_at = adjusted_first_gpx_at(args.sync, video_duration, gpx_points, args.gpx_offset)
+        first_gpx_at = default_first_gpx_at(args.sync, video_duration, gpx_points)
         if first_gpx_at is not None:
             gpx_duration = points_duration_seconds(gpx_points)
             print(
                 f"   🎬 Premier GPX auto: +{first_gpx_at:.3f}s "
                 f"(durée vidéo {video_duration:.3f}s - durée GPX {gpx_duration:.3f}s)"
             )
-
-    if args.gpx_offset:
-        print(f"   GPX offset: {args.gpx_offset:+.3f}s")
-        apply_gpx_offset(gpx_points, args.gpx_offset)
 
     # 3. Fusionner
     merged_points = merge_by_timestamp(
@@ -1190,7 +1169,6 @@ def main():
         osv_only_step=args.osv_only_step,
         video_duration=video_duration,
         first_gpx_at=first_gpx_at,
-        gpx_offset=args.gpx_offset,
     )
 
     if not merged_points:
