@@ -68,7 +68,7 @@
        <component type="metric" metric="odo"  align="right" x="240" y="400" size="40"/>
     </translate>
 
-    <composite x="480" y="1700" name="deco/attero">
+    <composite x="620" y="1700" name="deco/attero">
        <component type="text" size="32">Deco (m)</component>
        <component type="custom-calc" y="30" expression="state.setdefault('alt_start', alt)" dp="0" size="64" />
 
