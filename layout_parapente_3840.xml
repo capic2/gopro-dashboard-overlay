@@ -58,9 +58,9 @@
     </composite>
 
     <!-- carte -->
-    <translate x="20" y="1700">
-       <frame  width="440" height="440" cr="40">
-           <component type="video" size="440" fit="cover" id="pip" offset="0"/>
+    <translate x="20" y="1540">
+       <frame  width="600" height="600" cr="40">
+           <component type="video" size="600" fit="cover" id="pip" offset="0"/>
         <!--<component type="journey_map" size="440" opacity="0.7"  />-->
      </frame>
      <!-- distance -->
