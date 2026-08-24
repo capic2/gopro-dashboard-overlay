@@ -4,6 +4,7 @@ import subprocess
 import json
 import sys
 import xml.etree.ElementTree as ET
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 try:
@@ -644,6 +645,10 @@ def merge_by_timestamp(
 
     merged = []
     vspeeds = calculate_vertical_speeds(filtered_gpx_points)
+    # OSV segments are sorted chronologically by extract_osv_files(). Keep a
+    # parallel timestamp list so matching does not scan every sensor sample
+    # for every GPX point (which is prohibitive for long, split recordings).
+    osv_timestamps = [point['time'] for point in osv_points]
 
     if fill_osv_gap or include_osv_only:
         if osv_only_position == 'nearest':
@@ -697,15 +702,24 @@ def merge_by_timestamp(
 
         merged_point['vspeed'] = vspeed
 
-        # Chercher le point OSV le plus proche
-        best_osv = None
-        best_diff = float('inf')
-
-        for osv_point in osv_points:
-            time_diff = abs((osv_point['time'] - gpx_time).total_seconds())
-            if time_diff < best_diff:
-                best_diff = time_diff
-                best_osv = osv_point
+        # Chercher le point OSV le plus proche en O(log n), y compris lorsque
+        # plusieurs fichiers OSV ont été concaténés.
+        insertion_index = bisect_left(osv_timestamps, gpx_time)
+        candidates = []
+        if insertion_index < len(osv_points):
+            candidates.append(osv_points[insertion_index])
+        if insertion_index > 0:
+            candidates.append(osv_points[insertion_index - 1])
+        best_osv = min(
+            candidates,
+            key=lambda point: abs((point['time'] - gpx_time).total_seconds()),
+            default=None,
+        )
+        best_diff = (
+            abs((best_osv['time'] - gpx_time).total_seconds())
+            if best_osv is not None
+            else float('inf')
+        )
 
         # Enrichir avec OSV si disponible
         if best_osv and best_diff <= tolerance_seconds:

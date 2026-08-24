@@ -76,6 +76,23 @@ def test_absolute_sync_does_not_invent_first_gpx_offset():
     assert default_first_gpx_at('absolute', 548.8, points) is None
 
 
+def test_merge_uses_nearest_sample_across_multiple_osv_segments():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    first_segment = [osv_point(video_start, second) for second in range(0, 3)]
+    second_segment = [osv_point(video_start, second) for second in range(10, 13)]
+    second_segment[-1]['g_force'] = 2.0
+    gpx_points = [gpx_point(11.4, 100)]
+
+    merged = merge_by_timestamp(
+        first_segment + second_segment,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=False,
+    )
+
+    assert merged[0]['g_force'] == pytest.approx(2.0)
+
+
 def test_gpx_start_sync_keeps_legacy_first_gpx_offset():
     points = [
         gpx_point(0, 100),
