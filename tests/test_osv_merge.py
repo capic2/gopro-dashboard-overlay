@@ -7,6 +7,7 @@ from osv_merge import calculate_vertical_speeds
 from osv_merge import default_first_gpx_at
 from osv_merge import merge_by_timestamp
 from osv_merge import points_duration_seconds
+from osv_merge import preferred_osv_source
 from osv_merge import video_start_time
 
 
@@ -26,6 +27,22 @@ def osv_point(video_start, seconds):
         'timestamp_offset': seconds,
         'g_force': 1.0,
     }
+
+
+def test_preferred_osv_source_uses_smaller_companion_lrf(tmp_path):
+    osv_file = tmp_path / 'segment.OSV'
+    lrf_file = tmp_path / 'segment.LRF'
+    osv_file.write_bytes(b'large-osv')
+    lrf_file.write_bytes(b'lrf')
+
+    assert preferred_osv_source(osv_file) == lrf_file
+
+
+def test_preferred_osv_source_falls_back_to_osv_without_lrf(tmp_path):
+    osv_file = tmp_path / 'segment.OSV'
+    osv_file.write_bytes(b'osv')
+
+    assert preferred_osv_source(osv_file) == osv_file
 
 
 def test_vertical_speed_uses_centered_local_slope_without_lag():

@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover
@@ -15,6 +16,23 @@ except ImportError:  # pragma: no cover
 
 VSPEED_WINDOW_SECONDS = 1.5
 VSPEED_MAX_ABS_MPS = 15.0
+
+
+def preferred_osv_source(osv_file):
+    """Use the smaller companion LRF when it exists beside a GoPro OSV file."""
+    osv_path = Path(osv_file)
+    candidates = [
+        osv_path.with_suffix('.LRF'),
+        osv_path.with_suffix('.lrf'),
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.is_file() and candidate.stat().st_size < osv_path.stat().st_size:
+                print(f"   ⚡ Lecture télémétrie depuis le fichier LRF: {candidate}")
+                return candidate
+        except OSError:
+            continue
+    return osv_path
 
 
 def points_duration_seconds(points):
@@ -231,6 +249,7 @@ def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     Extrait les données d'un OSV avec Sample Time en secondes
     """
     print(f"🔍 Extraction de {osv_file}...")
+    osv_file = preferred_osv_source(osv_file)
 
     try:
         create_date_tz, create_date_tz_label = resolve_osv_timezone(osv_timezone, osv_utc_offset)
