@@ -18,6 +18,10 @@ VSPEED_WINDOW_SECONDS = 1.5
 VSPEED_MAX_ABS_MPS = 15.0
 
 
+class ExiftoolTimeoutError(RuntimeError):
+    pass
+
+
 def preferred_osv_source(osv_file):
     """Use the smaller companion LRF when it exists beside a GoPro OSV file."""
     osv_path = Path(osv_file)
@@ -244,12 +248,19 @@ def auto_align_osv_time(osv_points, gpx_points):
     print(f"   📍 OSV recalé: {osv_points[0]['time']} → {osv_points[-1]['time']}")
 
 
-def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
+def extract_osv_data(
+    osv_file,
+    osv_timezone=None,
+    osv_utc_offset=None,
+    exiftool_timeout=None,
+    use_companion_lrf=True,
+):
     """
     Extrait les données d'un OSV avec Sample Time en secondes
     """
     print(f"🔍 Extraction de {osv_file}...")
-    osv_file = preferred_osv_source(osv_file)
+    if use_companion_lrf:
+        osv_file = preferred_osv_source(osv_file)
 
     try:
         create_date_tz, create_date_tz_label = resolve_osv_timezone(osv_timezone, osv_utc_offset)
@@ -260,16 +271,20 @@ def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     print(f"   🌍 Timezone CreateDate OSV: {create_date_tz_label}")
 
     # Extraire avec exiftool AVEC -G3 pour avoir Doc1:ChampName
-    result = subprocess.run([
-        './exiftool/exiftool',
-        '-ee',
-        '-G3',  # ✅ GARDER -G3
-        '-api', 'LargeFileSupport=1',
-        '-*Time*', '-Date*', '-Create*',
-        '-GPS*', '-Accelerometer*', '-Gyroscope*',
-        '-json',
-        osv_file
-    ], capture_output=True, text=True)
+    try:
+        result = subprocess.run([
+            './exiftool/exiftool',
+            '-ee',
+            '-G3',  # ✅ GARDER -G3
+            '-api', 'LargeFileSupport=1',
+            '-*Time*', '-Date*', '-Create*',
+            '-GPS*', '-Accelerometer*', '-Gyroscope*',
+            '-json',
+            osv_file
+        ], capture_output=True, text=True, timeout=exiftool_timeout)
+    except subprocess.TimeoutExpired as exc:
+        print(f"⏱️  Timeout exiftool sur {osv_file}")
+        raise ExiftoolTimeoutError(str(osv_file)) from exc
 
     if result.returncode != 0:
         print(f"❌ Erreur exiftool: {result.stderr}")
@@ -400,20 +415,43 @@ def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     return points
 
 
-def extract_osv_files(osv_files, osv_timezone=None, osv_utc_offset=None, progress=None):
+def extract_osv_files(
+    osv_files,
+    osv_timezone=None,
+    osv_utc_offset=None,
+    progress=None,
+    exiftool_timeout=None,
+):
     """Extrait et concatène les points capteurs de plusieurs fichiers OSV."""
     all_points = []
 
     print(f"🎬 Fichiers OSV: {len(osv_files)}")
     for index, osv_file in enumerate(osv_files, start=1):
         if progress:
-            progress(5 + int(index * 30 / len(osv_files)))
+            progress(5 + int((index - 1) * 30 / len(osv_files)))
         print(f"\n--- OSV {index}/{len(osv_files)} ---")
-        all_points.extend(extract_osv_data(
-            osv_file,
-            osv_timezone=osv_timezone,
-            osv_utc_offset=osv_utc_offset,
-        ))
+        try:
+            points = extract_osv_data(
+                osv_file,
+                osv_timezone=osv_timezone,
+                osv_utc_offset=osv_utc_offset,
+                exiftool_timeout=exiftool_timeout,
+                use_companion_lrf=False,
+            )
+        except ExiftoolTimeoutError:
+            preferred_source = preferred_osv_source(osv_file)
+            if preferred_source == osv_file:
+                raise
+            print(f"⚠️  LRF indisponible, nouvelle tentative avec OSV: {osv_file}")
+            points = extract_osv_data(
+                osv_file,
+                osv_timezone=osv_timezone,
+                osv_utc_offset=osv_utc_offset,
+                exiftool_timeout=exiftool_timeout,
+            )
+        all_points.extend(points)
+        if progress:
+            progress(5 + int(index * 30 / len(osv_files)))
 
     all_points.sort(key=lambda point: point['time'])
 
@@ -1102,6 +1140,12 @@ def main():
     )
     parser.add_argument('--osv-only', action='store_true', help='Extrait seulement les capteurs OSV en GPX')
     parser.add_argument(
+        '--exiftool-timeout',
+        type=float,
+        default=600.0,
+        help='Timeout par fichier pour exiftool en secondes',
+    )
+    parser.add_argument(
         '--progress',
         action='store_true',
         help='Émet des marqueurs OSV_PROGRESS <pourcentage> pour un appelant automatisé',
@@ -1115,6 +1159,10 @@ def main():
 
     if args.osv_only_step < 0:
         print("❌ --osv-only-step doit être positif ou égal à 0")
+        sys.exit(1)
+
+    if args.exiftool_timeout <= 0:
+        print("❌ --exiftool-timeout doit être strictement positif")
         sys.exit(1)
 
     if args.video_duration is not None and args.video_duration <= 0:
@@ -1149,6 +1197,7 @@ def main():
             osv_timezone=osv_timezone,
             osv_utc_offset=args.osv_utc_offset,
             progress=progress,
+            exiftool_timeout=args.exiftool_timeout,
         )
 
         if not osv_points:
@@ -1184,6 +1233,7 @@ def main():
         osv_timezone=osv_timezone,
         osv_utc_offset=args.osv_utc_offset,
         progress=progress,
+        exiftool_timeout=args.exiftool_timeout,
     )
 
     if not osv_points:
