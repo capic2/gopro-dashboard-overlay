@@ -400,12 +400,14 @@ def extract_osv_data(osv_file, osv_timezone=None, osv_utc_offset=None):
     return points
 
 
-def extract_osv_files(osv_files, osv_timezone=None, osv_utc_offset=None):
+def extract_osv_files(osv_files, osv_timezone=None, osv_utc_offset=None, progress=None):
     """Extrait et concatène les points capteurs de plusieurs fichiers OSV."""
     all_points = []
 
     print(f"🎬 Fichiers OSV: {len(osv_files)}")
     for index, osv_file in enumerate(osv_files, start=1):
+        if progress:
+            progress(5 + int(index * 30 / len(osv_files)))
         print(f"\n--- OSV {index}/{len(osv_files)} ---")
         all_points.extend(extract_osv_data(
             osv_file,
@@ -579,6 +581,7 @@ def merge_by_timestamp(
     osv_only_step=1.0,
     video_duration=None,
     first_gpx_at=None,
+    progress=None,
 ):
     """
     Enrichit les points GPX avec les données OSV quand disponibles
@@ -708,7 +711,11 @@ def merge_by_timestamp(
         merged.extend(before_points)
         print(f"   ➕ Points OSV seuls avant GPX: {len(before_points)}")
 
-    for gpx_point, vspeed in zip(filtered_gpx_points, vspeeds):
+    if progress:
+        progress(50)
+    total_filtered_points = len(filtered_gpx_points)
+    last_progress = 50
+    for index, (gpx_point, vspeed) in enumerate(zip(filtered_gpx_points, vspeeds), start=1):
         gpx_time = gpx_point['time']
 
         merged_point = {
@@ -753,6 +760,11 @@ def merge_by_timestamp(
             })
 
         merged.append(merged_point)
+        if progress and total_filtered_points:
+            current_progress = 50 + int(index * 40 / total_filtered_points)
+            if current_progress > last_progress:
+                progress(current_progress)
+                last_progress = current_progress
 
     if include_osv_only or (forced_end is not None and fill_osv_gap):
         after_start = max(osv_start, gpx_points[-1]['time'] + timedelta(microseconds=1))
@@ -811,7 +823,7 @@ def merge_by_timestamp(
     return merged
 
 
-def generate_gpx(points, output_file):
+def generate_gpx(points, output_file, progress=None):
     """
     Génère le GPX fusionné avec extensions originales + OSV
     Acceleration et Gyroscope dans namespace gpxpx
@@ -830,6 +842,8 @@ def generate_gpx(points, output_file):
     <trkseg>
 '''
 
+    if progress:
+        progress(95)
     for point in points:
         lat = point['lat']
         lon = point['lon']
@@ -900,6 +914,8 @@ def generate_gpx(points, output_file):
         f.write(gpx)
 
     print(f"\n✅ GPX fusionné créé: {output_file}")
+    if progress:
+        progress(100)
 
 
 def generate_gpx_from_osv(points, output_file):
@@ -1085,7 +1101,17 @@ def main():
         help="Decalage en secondes applique aux timestamps GPX avant fusion. Positif retarde le GPX, negatif l'avance",
     )
     parser.add_argument('--osv-only', action='store_true', help='Extrait seulement les capteurs OSV en GPX')
+    parser.add_argument(
+        '--progress',
+        action='store_true',
+        help='Émet des marqueurs OSV_PROGRESS <pourcentage> pour un appelant automatisé',
+    )
     args = parser.parse_args()
+    progress = (
+        lambda value: print(f"OSV_PROGRESS {max(0, min(100, int(value)))}", flush=True)
+        if args.progress
+        else None
+    )
 
     if args.osv_only_step < 0:
         print("❌ --osv-only-step doit être positif ou égal à 0")
@@ -1122,6 +1148,7 @@ def main():
             osv_files,
             osv_timezone=osv_timezone,
             osv_utc_offset=args.osv_utc_offset,
+            progress=progress,
         )
 
         if not osv_points:
@@ -1156,6 +1183,7 @@ def main():
         osv_files,
         osv_timezone=osv_timezone,
         osv_utc_offset=args.osv_utc_offset,
+        progress=progress,
     )
 
     if not osv_points:
@@ -1164,6 +1192,8 @@ def main():
 
     # 2. Parser GPX
     gpx_points = parse_gpx(gpx_file)
+    if progress:
+        progress(45)
 
     if not gpx_points:
         print("❌ Aucun point GPX trouvé")
@@ -1202,6 +1232,7 @@ def main():
         osv_only_step=args.osv_only_step,
         video_duration=video_duration,
         first_gpx_at=first_gpx_at,
+        progress=progress,
     )
 
     if not merged_points:
