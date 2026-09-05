@@ -262,6 +262,17 @@ if __name__ == "__main__":
             if len(frame_meta) < 1:
                 fatal(f"Unable to load GoPro metadata from {inputpath}. Use --debug-metadata to see more information")
 
+            statistics_timeseries = frame_meta
+            if args.statistics_gpx:
+                statistics_file = assert_file_exists(args.statistics_gpx)
+                statistics_timeseries = load_external(statistics_file, units)
+                statistics_timeseries.process_deltas(timeseries_process.calculate_speeds())
+                statistics_timeseries.process(timeseries_process.calculate_odo())
+                log(
+                    "Statistics GPX/FIT file: "
+                    f"{fmtdt(statistics_timeseries.min)} -> {fmtdt(statistics_timeseries.max)}"
+                )
+
             log(f"Generating overlay at {dimensions}")
             log(f"Timeseries has {len(frame_meta)} data points")
             log("Processing....")
@@ -280,6 +291,8 @@ if __name__ == "__main__":
                                           filter_fn=locked_3d)  # hack
                 frame_meta.process(timeseries_process.process_kalman("speed", lambda e: e.speed))
                 frame_meta.process(timeseries_process.filter_locked())
+                if args.statistics_gpx:
+                    timeseries_process.apply_global_odometer(frame_meta, statistics_timeseries)
 
             # privacy zone applies everywhere, not just at start, so might not always be suitable...
             if args.privacy:
@@ -356,15 +369,6 @@ if __name__ == "__main__":
                     altitude_unit=args.units_altitude,
                     temperature_unit=args.units_temperature,
                 )
-
-                statistics_timeseries = frame_meta
-                if args.statistics_gpx:
-                    statistics_file = assert_file_exists(args.statistics_gpx)
-                    statistics_timeseries = load_external(statistics_file, units)
-                    log(
-                        "Statistics GPX/FIT file: "
-                        f"{fmtdt(statistics_timeseries.min)} -> {fmtdt(statistics_timeseries.max)}"
-                    )
 
                 layout_creator = create_desired_layout(
                     layout=args.layout,

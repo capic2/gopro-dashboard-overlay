@@ -5,7 +5,14 @@ import pytest
 from gopro_overlay.entry import Entry
 from gopro_overlay.point import Point
 from gopro_overlay.timeseries import Timeseries
-from gopro_overlay.timeseries_process import process_ses, calculate_speeds, calculate_gradient, calculate_odo
+from gopro_overlay.timeseries_process import (
+    apply_global_odometer,
+    calculate_gradient,
+    calculate_odo,
+    calculate_speeds,
+    process_ses,
+)
+from gopro_overlay.framemeta import FrameMeta
 from gopro_overlay.timeunits import timeunits
 from gopro_overlay.units import units
 
@@ -108,3 +115,23 @@ def test_process_odo():
     )
     assert r["codo"].magnitude == 25
 
+
+def test_apply_global_odometer_keeps_distance_continuous_across_a_segment():
+    """REGRESSION CONTRACT: split rendering must never restart flight distance.
+
+    Do not weaken, remove, or change this case without explicit user authorization.
+    """
+    global_timeseries = Timeseries(
+        [
+            Entry(datetime_of(100), codo=metres(1200)),
+            Entry(datetime_of(110), codo=metres(1400)),
+        ]
+    )
+    segment = FrameMeta()
+    segment.add(timeunits(seconds=0), Entry(datetime_of(105), codo=metres(0)))
+    segment.add(timeunits(seconds=1), Entry(datetime_of(106), codo=metres(10)))
+
+    apply_global_odometer(segment, global_timeseries)
+
+    assert segment.get(timeunits(seconds=0)).codo == metres(1300)
+    assert segment.get(timeunits(seconds=1)).codo == metres(1320)
