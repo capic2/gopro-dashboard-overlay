@@ -160,36 +160,32 @@ def seconds_between(a, b):
     return (a['time'] - b['time']).total_seconds()
 
 
-def calculate_vertical_speed(gpx_point, points):
-    """Calcule le vario local avec une regression altitude/temps centree."""
-    if gpx_point['ele'] is None:
+def calculate_vertical_speed(previous_gpx_point, gpx_point):
+    """Calcule le vario instantané entre deux relevés GPX consécutifs.
+
+    Il n'y a volontairement pas de lissage : le passage en montée ou en
+    descente est ainsi visible dès le relevé où le signe de l'altitude change.
+    """
+    if previous_gpx_point is None:
+        return None
+    if previous_gpx_point['ele'] is None or gpx_point['ele'] is None:
         return None
 
-    samples = []
-    for candidate in points:
-        if candidate['ele'] is None:
-            continue
-
-        offset = seconds_between(candidate, gpx_point)
-        if abs(offset) <= VSPEED_WINDOW_SECONDS:
-            samples.append((offset, candidate['ele']))
-
-    if len(samples) < 2:
+    elapsed_seconds = seconds_between(gpx_point, previous_gpx_point)
+    if elapsed_seconds <= 0:
         return None
 
-    mean_time = sum(offset for offset, _ in samples) / len(samples)
-    mean_ele = sum(ele for _, ele in samples) / len(samples)
-    variance_time = sum((offset - mean_time) ** 2 for offset, _ in samples)
-    if variance_time <= 0:
-        return None
-
-    covariance = sum((offset - mean_time) * (ele - mean_ele) for offset, ele in samples)
-    raw_vspeed = covariance / variance_time
+    raw_vspeed = (gpx_point['ele'] - previous_gpx_point['ele']) / elapsed_seconds
     return clamp(raw_vspeed, -VSPEED_MAX_ABS_MPS, VSPEED_MAX_ABS_MPS)
 
 
 def calculate_vertical_speeds(points):
-    return [calculate_vertical_speed(point, points) for point in points]
+    previous_point = None
+    vspeeds = []
+    for point in points:
+        vspeeds.append(calculate_vertical_speed(previous_point, point))
+        previous_point = point
+    return vspeeds
 
 
 def auto_align_osv_time(osv_points, gpx_points):

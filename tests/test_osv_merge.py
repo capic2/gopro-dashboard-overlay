@@ -45,7 +45,7 @@ def test_preferred_osv_source_falls_back_to_osv_without_lrf(tmp_path):
     assert preferred_osv_source(osv_file) == osv_file
 
 
-def test_vertical_speed_uses_centered_local_slope_without_lag():
+def test_vertical_speed_uses_the_last_interval_without_smoothing():
     points = [
         gpx_point(0, 100),
         gpx_point(1, 101),
@@ -58,6 +58,16 @@ def test_vertical_speed_uses_centered_local_slope_without_lag():
 
     assert vspeeds[1] == pytest.approx(1.0)
     assert vspeeds[3] == pytest.approx(7.0)
+
+
+def test_vertical_speed_changes_sign_at_the_start_of_a_descent():
+    points = [
+        gpx_point(0, 100),
+        gpx_point(1, 102),
+        gpx_point(2, 101),
+    ]
+
+    assert calculate_vertical_speeds(points) == [None, pytest.approx(2.0), pytest.approx(-1.0)]
 
 
 def test_vertical_speed_keeps_real_values_above_old_five_mps_limit():
