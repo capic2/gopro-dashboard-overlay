@@ -49,8 +49,9 @@ def accepter_from_args(include, exclude):
     return lambda n: True
 
 
-def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude, renderer, timeseries, font,
-                          privacy_zone, profiler, converters: Converters, ffmpeg_exe: FFMPEG, video: Optional[Path]):
+def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude, renderer, timeseries,
+                          statistics_timeseries, font, privacy_zone, profiler, converters: Converters,
+                          ffmpeg_exe: FFMPEG, video: Optional[Path]):
     accepter = accepter_from_args(include, exclude)
 
     if layout_xml:
@@ -61,7 +62,8 @@ def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude
         try:
             return layout_from_xml(
                 load_xml_layout(resource_name), renderer, timeseries, font, privacy_zone, include=accepter,
-                decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video
+                decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video,
+                statistics_timeseries=statistics_timeseries,
             )
         except FileNotFoundError:
             raise IOError(f"Unable to locate bundled layout resource: {resource_name}. "
@@ -72,7 +74,8 @@ def create_desired_layout(dimensions, layout, layout_xml: Path, include, exclude
     elif layout == "xml":
         return layout_from_xml(
             load_xml_layout(layout_xml), renderer, timeseries, font, privacy_zone, include=accepter,
-            decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video
+            decorator=profiler, converters=converters, ffmpeg=ffmpeg_exe, video=video,
+            statistics_timeseries=statistics_timeseries,
         )
     else:
         raise ValueError(f"Unsupported layout {args.layout_creator}")
@@ -354,6 +357,15 @@ if __name__ == "__main__":
                     temperature_unit=args.units_temperature,
                 )
 
+                statistics_timeseries = frame_meta
+                if args.statistics_gpx:
+                    statistics_file = assert_file_exists(args.statistics_gpx)
+                    statistics_timeseries = load_external(statistics_file, units)
+                    log(
+                        "Statistics GPX/FIT file: "
+                        f"{fmtdt(statistics_timeseries.min)} -> {fmtdt(statistics_timeseries.max)}"
+                    )
+
                 layout_creator = create_desired_layout(
                     layout=args.layout,
                     layout_xml=args.layout_xml,
@@ -362,6 +374,7 @@ if __name__ == "__main__":
                     exclude=args.exclude,
                     renderer=renderer,
                     timeseries=frame_meta,
+                    statistics_timeseries=statistics_timeseries,
                     font=font,
                     privacy_zone=privacy_zone,
                     profiler=profiler,

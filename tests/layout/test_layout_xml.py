@@ -18,6 +18,11 @@ from gopro_overlay.widgets.video import Video, VideoFrameSource
 from test_timeseries import datetime_of
 
 
+class _TestFont:
+    def font_variant(self, **kwargs):
+        return self
+
+
 def test_metric_accessor_speed():
     speed = units.Quantity(10, units.mph)
     cspeed = units.Quantity(20, units.mph)
@@ -25,6 +30,73 @@ def test_metric_accessor_speed():
 
     assert metric_accessor_from("speed")(entry) == speed
     assert metric_accessor_from("cspeed")(entry) == cspeed
+
+
+def test_custom_calc_uses_global_statistics_timeseries():
+    """REGRESSION CONTRACT: split rendering must retain whole-flight aggregates.
+
+    Do not weaken, remove, or change this case without explicit user authorization.
+    """
+    segment = FrameMeta()
+    segment.add(timeunits(seconds=0), FrameEntry(datetime_of(0), alt=units.Quantity(500, "m")))
+
+    whole_flight = FrameMeta()
+    whole_flight.add(
+        timeunits(seconds=0),
+        FrameEntry(
+            datetime_of(0),
+            alt=units.Quantity(200, "m"),
+            speed=units.Quantity(10, "m/s"),
+            hr=100,
+        ),
+    )
+    whole_flight.add(
+        timeunits(seconds=1),
+        FrameEntry(
+            datetime_of(1),
+            alt=units.Quantity(1200, "m"),
+            speed=units.Quantity(20, "m/s"),
+            hr=140,
+        ),
+    )
+
+    create = layout_from_xml(
+        '<layout><component type="custom_calc" expression="precalc.get(\'avg_alt\', 0)" /></layout>',
+        renderer=None,
+        framemeta=segment,
+        statistics_timeseries=whole_flight,
+        font=_TestFont(),
+        privacy=None,
+    )
+
+    widget = create(lambda: segment.get(segment.min))[0].widgets[0]
+
+    assert {
+        key: widget.precalc_stats[key]
+        for key in {
+            "min_alt",
+            "max_alt",
+            "avg_alt",
+            "total_gain",
+            "min_speed",
+            "max_speed",
+            "avg_speed",
+            "min_hr",
+            "max_hr",
+            "avg_hr",
+        }
+    } == {
+        "min_alt": 200,
+        "max_alt": 1200,
+        "avg_alt": 700,
+        "total_gain": 1000,
+        "min_speed": 36,
+        "max_speed": 72,
+        "avg_speed": 54,
+        "min_hr": 100,
+        "max_hr": 140,
+        "avg_hr": 120,
+    }
 
 def test_metric_accessor_respiration():
     resp = units.Quantity(10, units.brpm)

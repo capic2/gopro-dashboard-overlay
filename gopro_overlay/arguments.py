@@ -128,6 +128,11 @@ def gopro_dashboard_arguments(args=None):
 
     gpx.add_argument("--gpx", "--fit", type=pathlib.Path,
                      help="Use GPX/FIT file for location / alt / hr / cadence / temp ...")
+    gpx.add_argument(
+        "--statistics-gpx",
+        type=pathlib.Path,
+        help="Use this GPX/FIT file for whole-flight aggregate statistics in custom-calc widgets",
+    )
     gpx.add_argument("--gpx-merge", type=MergeMode, action=EnumNameAction, default=MergeMode.EXTEND,
                      help="When using GPX/FIT file - OVERWRITE=replace GPS/alt from GoPro with GPX values, EXTEND=just use additional values from GPX/FIT file e.g. hr/cad/power")
 
