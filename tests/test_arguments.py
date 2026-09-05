@@ -29,6 +29,22 @@ def test_gpx_only_synonyms():
     assert args.use_gpx_only
     assert args.gpx == Path("bob")
 
+
+def test_statistics_gpx_is_a_separate_global_statistics_source():
+    # REGRESSION CONTRACT — do not weaken, remove, or change without explicit
+    # user authorization: segmented renders need one whole-flight stats source.
+    args = do_args(
+        "--use-gpx-only",
+        "--gpx",
+        "segment.gpx",
+        "--statistics-gpx",
+        "whole-flight.gpx",
+        "--overlay-size",
+        "10x10",
+    )
+
+    assert args.statistics_gpx == Path("whole-flight.gpx")
+
     args = do_args("--use-fit-only", "--fit", "bob", "--overlay-size", "10x10", input="something")
     assert args.use_gpx_only
     assert args.gpx == Path("bob")

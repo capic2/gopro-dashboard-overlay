@@ -113,7 +113,8 @@ class Converters:
 
 def layout_from_xml(xml, renderer, framemeta, font, privacy, include=lambda name: True,
                     decorator: Optional[WidgetProfiler] = None, converters: Converters = Converters(),
-                    ffmpeg: Optional[FFMPEG] = None, video: Optional[Mapping[str, Path]] = None):
+                    ffmpeg: Optional[FFMPEG] = None, video: Optional[Mapping[str, Path]] = None,
+                    statistics_timeseries=None):
     root = ET.fromstring(xml)
 
     fonts = {}
@@ -128,6 +129,7 @@ def layout_from_xml(xml, renderer, framemeta, font, privacy, include=lambda name
         privacy=privacy,
         renderer=renderer,
         framemeta=framemeta,
+        statistics_timeseries=statistics_timeseries if statistics_timeseries is not None else framemeta,
         converters=converters,
         ffmpeg=ffmpeg if ffmpeg is not None else FFMPEG(),
         video=video,
@@ -411,8 +413,9 @@ class FloatRange:
 
 class Widgets:
 
-    def __init__(self, font, privacy, renderer, framemeta, converters, ffmpeg, video):
+    def __init__(self, font, privacy, renderer, framemeta, statistics_timeseries, converters, ffmpeg, video):
         self.framemeta = framemeta
+        self.statistics_timeseries = statistics_timeseries
         self.renderer = renderer
         self.privacy = privacy
         self.font = font
@@ -791,7 +794,7 @@ class Widgets:
             bar_max=iattrib(element, "bar_max", d=100),
             bar_color=rgbattr(element, "bar_rgb", d=(0, 255, 100)),
             bar_bg=rgbattr(element, "bar_bg", d=(50, 50, 50)),
-            timeseries=self.framemeta,  # ← CORRECTION : framemeta pas timeseries!
+            timeseries=self.statistics_timeseries,
         )
 
     @allow_attributes({"size", "metric", "units", "textsize", "green", "yellow", "end", "rotate", "outline"})
