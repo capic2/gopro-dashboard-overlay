@@ -74,7 +74,7 @@
         <component type="custom-calc" y="160" expression="precalc.get('min_alt', 0)" dp="0" size="64"  />
 
         <!-- distance -->
-        <component type="metric_unit" metric="odo" y="290" size="32" align="right">Distance ({:~P})</component>
-        <component type="metric" metric="odo"  align="right" y="330" size="64"/>
+        <component type="metric_unit" metric="odo" y="290" size="32">Distance ({:~P})</component>
+        <component type="metric" metric="odo"  y="330" size="64"/>
     </composite>
 </layout>
