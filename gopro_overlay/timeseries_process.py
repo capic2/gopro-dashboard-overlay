@@ -103,6 +103,21 @@ def calculate_odo():
     return accept
 
 
+def apply_global_odometer(frame_meta, global_timeseries):
+    """Replace segment-local odometer readings with their whole-flight values."""
+
+    def accept(entry):
+        try:
+            global_entry = global_timeseries.get(entry.dt)
+        except ValueError:
+            return None
+        if global_entry.codo is None:
+            return None
+        return {"codo": global_entry.codo}
+
+    frame_meta.process(accept)
+
+
 def filter_locked():
     fields = ["speed", "cspeed", "accel", "azi", "cog", "time", "dist", "grad", "cgrad", "alt"]
 
