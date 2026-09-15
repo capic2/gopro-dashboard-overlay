@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None
 
 
-VSPEED_WINDOW_SECONDS = 1.5
+VSPEED_WINDOW_SECONDS = 3.0
 VSPEED_MAX_ABS_MPS = 15.0
 
 
@@ -161,11 +161,7 @@ def seconds_between(a, b):
 
 
 def calculate_vertical_speed(previous_gpx_point, gpx_point):
-    """Calcule le vario instantané entre deux relevés GPX consécutifs.
-
-    Il n'y a volontairement pas de lissage : le passage en montée ou en
-    descente est ainsi visible dès le relevé où le signe de l'altitude change.
-    """
+    """Calcule le vario moyen entre deux relevés GPX suffisamment espacés."""
     if previous_gpx_point is None:
         return None
     if previous_gpx_point['ele'] is None or gpx_point['ele'] is None:
@@ -180,11 +176,31 @@ def calculate_vertical_speed(previous_gpx_point, gpx_point):
 
 
 def calculate_vertical_speeds(points):
-    previous_point = None
     vspeeds = []
-    for point in points:
-        vspeeds.append(calculate_vertical_speed(previous_point, point))
-        previous_point = point
+    for current_index, point in enumerate(points):
+        current_time = point.get('time')
+        if current_time is None:
+            vspeeds.append(None)
+            continue
+
+        vspeed = None
+        for previous_index in range(current_index - 1, -1, -1):
+            previous_point = points[previous_index]
+            previous_time = previous_point.get('time')
+            if previous_time is None:
+                continue
+
+            elapsed_seconds = (current_time - previous_time).total_seconds()
+            if elapsed_seconds <= 0:
+                continue
+            if elapsed_seconds < VSPEED_WINDOW_SECONDS:
+                continue
+
+            vspeed = calculate_vertical_speed(previous_point, point)
+            if vspeed is not None:
+                break
+
+        vspeeds.append(vspeed)
     return vspeeds
 
 

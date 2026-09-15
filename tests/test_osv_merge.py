@@ -45,7 +45,7 @@ def test_preferred_osv_source_falls_back_to_osv_without_lrf(tmp_path):
     assert preferred_osv_source(osv_file) == osv_file
 
 
-def test_vertical_speed_uses_the_last_interval_without_smoothing():
+def test_vertical_speed_smooths_short_intervals():
     points = [
         gpx_point(0, 100),
         gpx_point(1, 101),
@@ -56,25 +56,27 @@ def test_vertical_speed_uses_the_last_interval_without_smoothing():
 
     vspeeds = calculate_vertical_speeds(points)
 
-    assert vspeeds[1] == pytest.approx(1.0)
-    assert vspeeds[3] == pytest.approx(7.0)
+    assert vspeeds[1] is None
+    assert vspeeds[3] == pytest.approx(3.0)
+    assert vspeeds[4] == pytest.approx(5.0)
 
 
-def test_vertical_speed_changes_sign_at_the_start_of_a_descent():
+def test_vertical_speed_changes_sign_after_the_smoothing_window():
     points = [
         gpx_point(0, 100),
         gpx_point(1, 102),
         gpx_point(2, 101),
+        gpx_point(3, 99),
     ]
 
-    assert calculate_vertical_speeds(points) == [None, pytest.approx(2.0), pytest.approx(-1.0)]
+    assert calculate_vertical_speeds(points) == [None, None, None, pytest.approx(-1 / 3)]
 
 
 def test_vertical_speed_keeps_real_values_above_old_five_mps_limit():
     points = [
         gpx_point(0, 100),
-        gpx_point(1, 108),
-        gpx_point(2, 116),
+        gpx_point(3, 124),
+        gpx_point(4, 132),
     ]
 
     assert calculate_vertical_speeds(points)[1] == pytest.approx(8.0)
