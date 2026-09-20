@@ -28,6 +28,7 @@ def test_preview_size_uses_explicit_dimensions_and_defaults_for_components():
 
 
 def test_canvas_size_is_inferred_from_layout_filename():
+    assert infer_canvas_size(Path("layout_karting_1080.xml")) == (1920, 1080)
     assert infer_canvas_size(Path("layout_parapente_3840.xml")) == (3840, 2160)
     assert infer_canvas_size(None) == (1920, 1080)
 

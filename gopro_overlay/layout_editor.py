@@ -139,12 +139,19 @@ def preview_size(element: ET.Element) -> tuple[int, int]:
 
 
 def infer_canvas_size(path: Path | None, fallback: tuple[int, int] = (1920, 1080)) -> tuple[int, int]:
-    """Infer common 16:9 canvas sizes from layout filenames."""
+    """Infer canvas sizes from layout filenames.
+
+    Layouts named ``*_1080.xml`` use the height convention (1080p), while
+    layouts named ``*_3840.xml`` use the width convention. Handle both.
+    """
     if path is not None:
         match = re.search(r"(?:^|_)(\d{3,5})(?:[-_.]|$)", path.stem)
         if match:
-            width = int(match.group(1))
-            return width, round(width * 9 / 16)
+            value = int(match.group(1))
+            height_presets = {720: (1280, 720), 1080: (1920, 1080), 1440: (2560, 1440), 2160: (3840, 2160), 2880: (5120, 2880), 4320: (7680, 4320)}
+            if value in height_presets:
+                return height_presets[value]
+            return value, round(value * 9 / 16)
     return fallback
 
 
