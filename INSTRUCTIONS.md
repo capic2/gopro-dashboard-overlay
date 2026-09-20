@@ -85,6 +85,10 @@ venv/bin/gopro-layout-editor.py ./layout_karting_1080.xml --overlay-size 1920x10
 
 Les éléments peuvent être ajoutés depuis la palette, sélectionnés, déplacés à la souris, redimensionnés avec la poignée violette, supprimés avec `Suppr` et configurés dans le panneau de droite. `Enregistrer` conserve le format XML utilisé par `gopro-dashboard.py`.
 
+L’éditeur propose également une arborescence avec recherche, la duplication, l’ordre des calques, l’annulation/rétablissement, la grille magnétique, le verrouillage/masquage, des modèles de widgets et plusieurs résolutions de canvas. Le bouton `Vue rendu` affiche le rendu Pillow du layout ; `Données GPX…` permet de charger une trace réelle, sinon des données de test sont utilisées.
+
+La barre latérale est organisée en sections repliables : `Widgets`, `Arborescence`, `Options d’édition` et `Canvas`.
+
 ### Parapente
 
 `venv/bin/gopro-dashboard.py --use-gpx-only --overlay-size 1920x1080 --gpx ./merged.gpx --layout xml --layout-xml ./layout_parapente_1080.xml video_entree.mp4 video_sortie.mp4`
