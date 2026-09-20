@@ -11,9 +11,10 @@ import argparse
 import copy
 from datetime import timedelta
 import re
+import subprocess
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Iterable
 from xml.etree import ElementTree as ET
 
@@ -279,6 +280,7 @@ class LayoutEditor(tk.Tk):
         ttk.Button(toolbar, text="Ouvrir", command=self.open_layout).pack(side="left")
         ttk.Button(toolbar, text="Enregistrer", command=self.save_layout).pack(side="left", padx=6)
         ttk.Button(toolbar, text="Enregistrer sous…", command=self.save_layout_as).pack(side="left")
+        ttk.Button(toolbar, text="Publier sur GitHub", command=self.publish_to_github).pack(side="left", padx=(6, 0))
         ttk.Button(toolbar, text="Nouveau", command=self.new_layout).pack(side="left")
         ttk.Button(toolbar, text="Annuler", command=self.undo).pack(side="left", padx=(18, 2))
         ttk.Button(toolbar, text="Rétablir", command=self.redo).pack(side="left", padx=2)
@@ -409,21 +411,77 @@ class LayoutEditor(tk.Tk):
         self.redo_stack.clear()
         self._refresh()
 
-    def save_layout(self) -> None:
+    def save_layout(self) -> bool:
         errors = validate_layout(self.root_element)
         if errors:
             messagebox.showerror("Layout invalide", "\n".join(errors[:12]), parent=self)
-            return
+            return False
         path = self.layout_path
         if path is None:
             chosen = filedialog.asksaveasfilename(defaultextension=".xml", filetypes=[("Layout XML", "*.xml")])
             if not chosen:
-                return
+                return False
             path = Path(chosen)
             self.layout_path = path
         ET.indent(self.root_element, space="    ")
         ET.ElementTree(self.root_element).write(path, encoding="utf-8", xml_declaration=False)
         self.status.configure(text=f"Enregistré : {path.name}")
+        return True
+
+    def publish_to_github(self) -> None:
+        """Commit and push only the currently opened layout file."""
+        if self.layout_path is None:
+            messagebox.showinfo("Publication GitHub", "Enregistrez d’abord le layout dans un fichier XML.", parent=self)
+            return
+        if not self.save_layout():
+            return
+
+        try:
+            repo = Path(subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=self.layout_path.parent,
+                text=True,
+                stderr=subprocess.STDOUT,
+            ).strip()).resolve()
+            layout_path = self.layout_path.resolve()
+            relative_path = layout_path.relative_to(repo)
+            branch = subprocess.check_output(
+                ["git", "branch", "--show-current"], cwd=repo, text=True, stderr=subprocess.STDOUT
+            ).strip()
+            if not branch:
+                raise RuntimeError("Le dépôt est sur une branche détachée.")
+        except (subprocess.CalledProcessError, ValueError, OSError) as exc:
+            messagebox.showerror("Publication GitHub impossible", str(exc), parent=self)
+            return
+
+        changed = subprocess.run(
+            ["git", "status", "--porcelain", "--", str(relative_path)],
+            cwd=repo, text=True, capture_output=True, check=False,
+        )
+        if not changed.stdout.strip():
+            self.status.configure(text="Aucune modification à publier")
+            messagebox.showinfo("Publication GitHub", "Le layout est déjà à jour dans Git.", parent=self)
+            return
+
+        default_message = f"Update layout {layout_path.name}"
+        commit_message = simpledialog.askstring(
+            "Publication GitHub", "Message du commit :", initialvalue=default_message, parent=self
+        )
+        if not commit_message or not commit_message.strip():
+            return
+
+        try:
+            subprocess.run(["git", "add", "--", str(relative_path)], cwd=repo, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "commit", "-m", commit_message.strip()], cwd=repo, check=True, capture_output=True, text=True)
+            result = subprocess.run(
+                ["git", "push", "origin", branch], cwd=repo, check=True, capture_output=True, text=True
+            )
+            output = (result.stdout + result.stderr).strip()
+            self.status.configure(text=f"Publié sur GitHub : {branch}")
+            messagebox.showinfo("Publication GitHub réussie", output or f"Le layout a été poussé sur {branch}.", parent=self)
+        except subprocess.CalledProcessError as exc:
+            output = ((exc.stdout or "") + (exc.stderr or "")).strip()
+            messagebox.showerror("Publication GitHub échouée", output or str(exc), parent=self)
 
     def validate(self) -> None:
         errors = validate_layout(self.root_element)

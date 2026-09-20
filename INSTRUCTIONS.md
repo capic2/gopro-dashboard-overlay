@@ -89,6 +89,8 @@ L’éditeur propose également une arborescence avec recherche, la duplication,
 
 La barre latérale est organisée en sections repliables : `Widgets`, `Arborescence`, `Options d’édition` et `Canvas`.
 
+Le bouton `Publier sur GitHub` enregistre le layout courant, ne committe que ce fichier XML, puis le pousse sur la branche Git courante. Le dépôt doit être authentifié auprès de GitHub et le fichier doit se trouver dans le dépôt Git.
+
 ### Parapente
 
 `venv/bin/gopro-dashboard.py --use-gpx-only --overlay-size 1920x1080 --gpx ./merged.gpx --layout xml --layout-xml ./layout_parapente_1080.xml video_entree.mp4 video_sortie.mp4`
