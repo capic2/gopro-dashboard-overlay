@@ -161,7 +161,7 @@ def fake_preview_framemeta():
     from gopro_overlay import fake
     from gopro_overlay.units import units
 
-    framemeta = fake.fake_framemeta(length=timedelta(minutes=3), step=timedelta(seconds=0.1))
+    framemeta = fake.fake_framemeta(length=timedelta(seconds=60), step=timedelta(seconds=0.1))
     for index, entry in enumerate(framemeta.items()):
         seconds = index / 10
         lap = int(seconds // 30) + 1
@@ -253,6 +253,8 @@ class LayoutEditor(tk.Tk):
         self._background_photo = None
         self.preview_framemeta = None
         self.preview_source: Path | None = None
+        self._render_cache_key = None
+        self._render_cache_frame = None
         self.view_mode = "edit"
         self.render_var = tk.BooleanVar(value=False)
         self.snap_enabled = True
@@ -262,6 +264,11 @@ class LayoutEditor(tk.Tk):
         self.undo_stack: list[bytes] = []
         self.redo_stack: list[bytes] = []
         self._tree_items: dict[str, ET.Element] = {}
+        self._tree_open_states: dict[int, bool] = {}
+        self._tree_drag_item: str | None = None
+        self._tree_drag_source: ET.Element | None = None
+        self._tree_dragging = False
+        self._refreshing_tree = False
         self.root_element = ET.Element("layout")
         self.selected: ET.Element | None = None
         self._canvas_items: dict[int, ET.Element] = {}
@@ -270,9 +277,14 @@ class LayoutEditor(tk.Tk):
         self._resize_start: tuple[int, int] | None = None
         self._resize_origin: tuple[int, int] | None = None
         self._build_ui()
+        self._bind_arrow_shortcuts(self)
         self.bind_all("<Control-z>", self._undo_shortcut)
         self.bind_all("<Control-y>", self._redo_shortcut)
         self.bind_all("<Control-Shift-Z>", self._redo_shortcut)
+        self.bind_all("<Left>", lambda event: self._keyboard_nudge(event, -1, 0))
+        self.bind_all("<Right>", lambda event: self._keyboard_nudge(event, 1, 0))
+        self.bind_all("<Up>", lambda event: self._keyboard_nudge(event, 0, -1))
+        self.bind_all("<Down>", lambda event: self._keyboard_nudge(event, 0, 1))
         if layout_path:
             self.load(layout_path)
         else:
@@ -284,35 +296,58 @@ class LayoutEditor(tk.Tk):
 
         toolbar = ttk.Frame(self, padding=(10, 8))
         toolbar.grid(row=0, column=0, columnspan=3, sticky="ew")
-        ttk.Button(toolbar, text="Ouvrir", command=self.open_layout).pack(side="left")
-        ttk.Button(toolbar, text="Enregistrer", command=self.save_layout).pack(side="left", padx=6)
-        ttk.Button(toolbar, text="Enregistrer sous…", command=self.save_layout_as).pack(side="left")
-        ttk.Button(toolbar, text="Publier sur GitHub", command=self.publish_to_github).pack(side="left", padx=(6, 0))
-        ttk.Button(toolbar, text="Nouveau", command=self.new_layout).pack(side="left")
-        ttk.Button(toolbar, text="Annuler", command=self.undo).pack(side="left", padx=(18, 2))
-        ttk.Button(toolbar, text="Rétablir", command=self.redo).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Dupliquer", command=self.duplicate_selected).pack(side="left", padx=(12, 2))
-        ttk.Button(toolbar, text="↑", width=3, command=lambda: self.move_layer(-1)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="↓", width=3, command=lambda: self.move_layer(1)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Valider XML", command=self.validate).pack(side="left", padx=(12, 2))
-        ttk.Checkbutton(toolbar, text="Vue rendu", variable=self.render_var, command=self.toggle_render_view).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Données GPX…", command=self.choose_preview_data).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Image de fond", command=self.choose_background).pack(side="left", padx=(18, 6))
-        ttk.Button(toolbar, text="−", width=3, command=lambda: self.change_zoom(0.8)).pack(side="left", padx=(18, 2))
-        self.zoom_label = ttk.Label(toolbar, text="100 %", width=7, anchor="center")
+        toolbar_top = ttk.Frame(toolbar)
+        toolbar_top.pack(fill="x", pady=(0, 4))
+        toolbar_bottom = ttk.Frame(toolbar)
+        toolbar_bottom.pack(fill="x")
+
+        file_group = ttk.LabelFrame(toolbar_top, text="Fichier", padding=(4, 2))
+        file_group.pack(side="left", padx=(0, 6))
+        ttk.Button(file_group, text="Ouvrir", command=self.open_layout).pack(side="left")
+        ttk.Button(file_group, text="Enregistrer", command=self.save_layout).pack(side="left", padx=3)
+        ttk.Button(file_group, text="Enregistrer sous…", command=self.save_layout_as).pack(side="left")
+        ttk.Button(file_group, text="Nouveau", command=self.new_layout).pack(side="left", padx=(3, 0))
+        ttk.Button(file_group, text="Publier sur GitHub", command=self.publish_to_github).pack(side="left", padx=(3, 0))
+
+        edit_group = ttk.LabelFrame(toolbar_top, text="Édition", padding=(4, 2))
+        edit_group.pack(side="left", padx=6)
+        ttk.Button(edit_group, text="Annuler", command=self.undo).pack(side="left")
+        ttk.Button(edit_group, text="Rétablir", command=self.redo).pack(side="left", padx=3)
+        ttk.Button(edit_group, text="Dupliquer", command=self.duplicate_selected).pack(side="left")
+
+        hierarchy_group = ttk.LabelFrame(toolbar_top, text="Calques / imbrication", padding=(4, 2))
+        hierarchy_group.pack(side="left", padx=6)
+        ttk.Button(hierarchy_group, text="↑", width=3, command=lambda: self.move_layer(-1)).pack(side="left")
+        ttk.Button(hierarchy_group, text="↓", width=3, command=lambda: self.move_layer(1)).pack(side="left", padx=2)
+        ttk.Button(hierarchy_group, text="Indenter", command=self.indent_selected).pack(side="left", padx=(3, 2))
+        ttk.Button(hierarchy_group, text="Désindenter", command=self.outdent_selected).pack(side="left")
+
+        render_group = ttk.LabelFrame(toolbar_bottom, text="Rendu", padding=(4, 2))
+        render_group.pack(side="left", padx=(0, 6))
+        ttk.Button(render_group, text="Valider XML", command=self.validate).pack(side="left")
+        ttk.Checkbutton(render_group, text="Vue rendu", variable=self.render_var, command=self.toggle_render_view).pack(side="left", padx=3)
+        ttk.Button(render_group, text="Données GPX…", command=self.choose_preview_data).pack(side="left")
+        ttk.Button(render_group, text="Image de fond", command=self.choose_background).pack(side="left", padx=(3, 0))
+
+        canvas_group = ttk.LabelFrame(toolbar_bottom, text="Canvas", padding=(4, 2))
+        canvas_group.pack(side="left", padx=6)
+        ttk.Button(canvas_group, text="−", width=3, command=lambda: self.change_zoom(0.8)).pack(side="left")
+        self.zoom_label = ttk.Label(canvas_group, text="100 %", width=7, anchor="center")
         self.zoom_label.pack(side="left")
-        ttk.Button(toolbar, text="+", width=3, command=lambda: self.change_zoom(1.25)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Ajuster à l’écran", command=self.fit_canvas).pack(side="left")
-        ttk.Label(toolbar, text="Résolution").pack(side="left", padx=(12, 4))
+        ttk.Button(canvas_group, text="+", width=3, command=lambda: self.change_zoom(1.25)).pack(side="left")
+        ttk.Button(canvas_group, text="Ajuster à l’écran", command=self.fit_canvas).pack(side="left", padx=(3, 0))
+        ttk.Label(canvas_group, text="Résolution").pack(side="left", padx=(8, 4))
         self.resolution_var = tk.StringVar(value=f"{self.canvas_size[0]}x{self.canvas_size[1]}")
-        resolution = ttk.Combobox(toolbar, textvariable=self.resolution_var, width=12, state="readonly", values=("1920x1080", "2560x1440", "3840x2160", "5120x2880", "7680x4320"))
+        resolution = ttk.Combobox(canvas_group, textvariable=self.resolution_var, width=12, state="readonly", values=("1920x1080", "2560x1440", "3840x2160", "5120x2880", "7680x4320"))
         resolution.pack(side="left")
         resolution.bind("<<ComboboxSelected>>", self.change_resolution)
-        self.status = ttk.Label(toolbar, text="Sélectionnez un élément")
-        self.status.pack(side="right")
+        self.status = ttk.Label(toolbar_bottom, text="Sélectionnez un élément")
+        self.status.pack(side="right", padx=(12, 0))
 
-        sidebar = ttk.Frame(self)
-        sidebar.grid(row=1, column=0, sticky="nsew", padx=(10, 6), pady=(0, 10))
+        content = ttk.PanedWindow(self, orient="horizontal")
+        content.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+
+        sidebar = ttk.Frame(content, padding=(0, 0, 6, 0))
         sidebar.rowconfigure(0, weight=1)
         sidebar.columnconfigure(0, weight=1)
         sidebar_canvas = tk.Canvas(sidebar, width=260, highlightthickness=0, background="#f7f7f7")
@@ -341,9 +376,19 @@ class LayoutEditor(tk.Tk):
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_args: self._refresh_tree())
         ttk.Entry(browser_section.content, textvariable=self.search_var, width=25).pack(fill="x", pady=(2, 6))
-        self.tree = ttk.Treeview(browser_section.content, height=12, show="tree", selectmode="browse")
-        self.tree.pack(fill="both", expand=True)
+        tree_frame = ttk.Frame(browser_section.content)
+        tree_frame.pack(fill="both", expand=True)
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
+        self.tree = ttk.Treeview(tree_frame, height=12, show="tree", selectmode="browse")
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        tree_scroll.grid(row=0, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=tree_scroll.set)
         self.tree.bind("<<TreeviewSelect>>", self._tree_select)
+        self.tree.bind("<ButtonPress-1>", self._tree_drag_start, add="+")
+        self.tree.bind("<B1-Motion>", self._tree_drag_motion, add="+")
+        self.tree.bind("<ButtonRelease-1>", self._tree_drag_release, add="+")
 
         options_section = CollapsibleSection(palette, "Options d’édition")
         options_section.pack(fill="x", pady=6)
@@ -360,8 +405,7 @@ class LayoutEditor(tk.Tk):
         ttk.Label(canvas_section.content, text=f"{self.canvas_size[0]} × {self.canvas_size[1]} px", foreground="#667085").pack(anchor="w")
         ttk.Label(canvas_section.content, text="Glisser : déplacer\nPoignée violette : redimensionner\nSuppr : supprimer", foreground="#667085").pack(anchor="w", pady=(8, 0))
 
-        canvas_frame = ttk.Frame(self)
-        canvas_frame.grid(row=1, column=1, sticky="nsew", pady=(0, 10))
+        canvas_frame = ttk.Frame(content)
         canvas_frame.rowconfigure(0, weight=1)
         canvas_frame.columnconfigure(0, weight=1)
         self.canvas = tk.Canvas(canvas_frame, background="#111827", highlightthickness=0)
@@ -375,16 +419,32 @@ class LayoutEditor(tk.Tk):
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._release)
         self.canvas.bind("<Delete>", lambda _event: self.delete_selected())
+        self.canvas.bind("<Left>", lambda event: self._keyboard_nudge(event, -1, 0), add="+")
+        self.canvas.bind("<Right>", lambda event: self._keyboard_nudge(event, 1, 0), add="+")
+        self.canvas.bind("<Up>", lambda event: self._keyboard_nudge(event, 0, -1), add="+")
+        self.canvas.bind("<Down>", lambda event: self._keyboard_nudge(event, 0, 1), add="+")
         self.canvas.bind("<Control-MouseWheel>", self._wheel_zoom)
         self.canvas.bind("<Control-Button-4>", lambda _event: self.change_zoom(1.25))
         self.canvas.bind("<Control-Button-5>", lambda _event: self.change_zoom(0.8))
 
-        inspector = ttk.LabelFrame(self, text="Configuration", padding=8)
-        inspector.grid(row=1, column=2, sticky="ns", padx=(6, 10), pady=(0, 10))
+        inspector = ttk.LabelFrame(content, text="Configuration", padding=8)
         inspector.columnconfigure(1, weight=1)
         self.inspector = inspector
         self.fields: dict[str, ttk.Entry] = {}
         ttk.Label(inspector, text="Sélectionnez un élément\npour modifier ses options.", foreground="#667085").grid(column=0, row=0, columnspan=2, sticky="w")
+        content.add(sidebar, weight=0)
+        content.add(canvas_frame, weight=1)
+        content.add(inspector, weight=0)
+
+    def _bind_arrow_shortcuts(self, widget: tk.Misc) -> None:
+        """Handle arrows before native canvas/tree navigation can consume them."""
+        if not isinstance(widget, (tk.Entry, tk.Text, ttk.Entry)):
+            widget.bind("<Left>", lambda event: self._keyboard_nudge(event, -1, 0), add="+")
+            widget.bind("<Right>", lambda event: self._keyboard_nudge(event, 1, 0), add="+")
+            widget.bind("<Up>", lambda event: self._keyboard_nudge(event, 0, -1), add="+")
+            widget.bind("<Down>", lambda event: self._keyboard_nudge(event, 0, 1), add="+")
+        for child in widget.winfo_children():
+            self._bind_arrow_shortcuts(child)
 
     def load(self, path: Path) -> None:
         self.layout_path = path
@@ -534,20 +594,57 @@ class LayoutEditor(tk.Tk):
         self.redo()
         return "break"
 
+    def _keyboard_nudge(self, event, dx: int, dy: int) -> str:
+        focused = self.focus_get()
+        if isinstance(focused, (tk.Entry, tk.Text, ttk.Entry)) or self.selected is None:
+            return ""
+        if id(self.selected) in self.locked:
+            self.status.configure(text="Widget verrouillé")
+            return "break"
+        step = 10 if event.state & 0x0001 else 1
+        self._remember_state()
+        x, y = absolute_position(self.root_element, self.selected)
+        parent = parent_of(self.root_element, self.selected)
+        parent_x, parent_y = absolute_position(self.root_element, parent) if parent is not None else (0, 0)
+        # Update only the axis requested by the key.  Apart from being clearer,
+        # this preserves the other XML attribute even for nested widgets.
+        if dx:
+            self.selected.set("x", str(max(0, x + dx * step - parent_x)))
+        if dy:
+            self.selected.set("y", str(max(0, y + dy * step - parent_y)))
+        self.status.configure(text=f"Position : {x + dx * step}, {y + dy * step}")
+        self._refresh()
+        return "break"
+
     def _refresh_tree(self) -> None:
-        if not hasattr(self, "tree"):
+        if not hasattr(self, "tree") or self._refreshing_tree:
             return
+        self._refreshing_tree = True
+        # Rebuilding the Treeview is needed after every edit, but must not
+        # unexpectedly reopen composites that the user has collapsed.
+        for item_id, element in self._tree_items.items():
+            if self.tree.exists(item_id):
+                self._tree_open_states[id(element)] = bool(self.tree.item(item_id, "open"))
         query = self.search_var.get().strip().lower()
         self.tree.delete(*self.tree.get_children())
         self._tree_items.clear()
+        selected_item = None
 
         def add(parent_id: str, element: ET.Element) -> None:
+            nonlocal selected_item
             name = element.attrib.get("name", "(sans nom)")
             label = f"{name}  ·  {element_kind(element)}"
             if query and query not in label.lower() and not any(query in (child.attrib.get("name", "") + element_kind(child)).lower() for child in element):
                 return
-            item_id = self.tree.insert(parent_id, "end", text=label, open=True)
+            item_id = self.tree.insert(
+                parent_id,
+                "end",
+                text=label,
+                open=self._tree_open_states.get(id(element), True),
+            )
             self._tree_items[item_id] = element
+            if element is self.selected:
+                selected_item = item_id
             for child in element:
                 if child.tag in {"component", "composite", "translate", "frame"}:
                     add(item_id, child)
@@ -555,12 +652,93 @@ class LayoutEditor(tk.Tk):
         for element in self.root_element:
             if element.tag in {"component", "composite", "translate", "frame"}:
                 add("", element)
+        if selected_item is not None:
+            if self.tree.selection() != (selected_item,):
+                self.tree.selection_set(selected_item)
+            self.tree.focus(selected_item)
+            self.tree.see(selected_item)
+        self._refreshing_tree = False
 
     def _tree_select(self, _event=None) -> None:
+        if self._refreshing_tree:
+            return
         selection = self.tree.selection()
         if selection and selection[0] in self._tree_items:
-            self.selected = self._tree_items[selection[0]]
+            element = self._tree_items[selection[0]]
+            # Tk can deliver <<TreeviewSelect>> after the tree has been
+            # rebuilt. Do not start another full refresh for the same node.
+            if element is self.selected:
+                return
+            self.selected = element
             self._refresh()
+
+    def _tree_drag_start(self, event) -> None:
+        item_id = self.tree.identify_row(event.y)
+        self._tree_drag_item = item_id or None
+        self._tree_drag_source = self._tree_items.get(item_id) if item_id else None
+        self._tree_dragging = False
+
+    def _tree_drag_motion(self, _event) -> None:
+        if self._tree_drag_item:
+            self._tree_dragging = True
+            self.tree.configure(cursor="hand2")
+
+    def _tree_drag_release(self, event) -> None:
+        source_id = self._tree_drag_item
+        source = self._tree_drag_source
+        was_dragging = self._tree_dragging
+        self._tree_drag_item = None
+        self._tree_drag_source = None
+        self._tree_dragging = False
+        self.tree.configure(cursor="")
+        if not was_dragging or source is None:
+            return
+        target_id = self.tree.identify_row(event.y)
+        if not target_id or target_id == source_id or target_id not in self._tree_items:
+            return
+        target = self._tree_items[target_id]
+        if source is target or self._is_tree_descendant(source, target):
+            self.status.configure(text="Impossible d’imbriquer un groupe dans son propre contenu")
+            return
+
+        containers = {"composite", "translate", "frame"}
+        if target.tag in containers:
+            new_parent = target
+            new_index = len(target)
+            message = "Widget imbriqué dans le groupe sélectionné"
+        else:
+            new_parent = parent_of(self.root_element, target)
+            if new_parent is None:
+                return
+            bbox = self.tree.bbox(target_id)
+            after_target = bool(bbox and event.y > bbox[1] + bbox[3] / 2)
+            new_index = list(new_parent).index(target) + (1 if after_target else 0)
+            message = "Widget repositionné dans l’arborescence"
+        self._move_tree_node(source, new_parent, new_index)
+        self.status.configure(text=message)
+
+    def _is_tree_descendant(self, ancestor: ET.Element, candidate: ET.Element) -> bool:
+        return any(child is candidate for child in ancestor.iter() if child is not ancestor)
+
+    def _move_tree_node(self, node: ET.Element, new_parent: ET.Element, index: int) -> None:
+        old_parent = parent_of(self.root_element, node)
+        if old_parent is None:
+            return
+        absolute_x, absolute_y = absolute_position(self.root_element, node)
+        new_parent_x, new_parent_y = absolute_position(self.root_element, new_parent)
+        self._remember_state()
+        if old_parent is new_parent:
+            old_index = list(old_parent).index(node)
+            if old_index < index:
+                index -= 1
+        old_parent.remove(node)
+        if old_parent is new_parent and index > len(new_parent):
+            index = len(new_parent)
+        new_parent.insert(max(0, min(index, len(new_parent))), node)
+        node.set("x", str(absolute_x - new_parent_x))
+        node.set("y", str(absolute_y - new_parent_y))
+        self.selected = node
+        self._refresh()
 
     def _toggle_grid(self) -> None:
         self.grid_enabled = self.grid_var.get()
@@ -663,6 +841,15 @@ class LayoutEditor(tk.Tk):
         from gopro_overlay.privacy import NoPrivacyZone
         from gopro_overlay.widgets.widgets import SimpleFrameSupplier
 
+        render_key = (
+            ET.tostring(self.root_element, encoding="utf-8"),
+            str(self.preview_source) if self.preview_source else None,
+            self.canvas_size,
+            str(self.background_path) if self.background_path else None,
+        )
+        if render_key == self._render_cache_key and self._render_cache_frame is not None:
+            return self._render_cache_frame.copy()
+
         framemeta = self.preview_framemeta or fake_preview_framemeta()
         font_candidates = (
             Path("/usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Medium.ttf"),
@@ -719,6 +906,8 @@ class LayoutEditor(tk.Tk):
             with Image.open(self.background_path) as image:
                 background = image.convert("RGBA").resize(self.canvas_size, Image.Resampling.LANCZOS)
             frame = Image.alpha_composite(background, frame)
+        self._render_cache_key = render_key
+        self._render_cache_frame = frame.copy()
         return frame
 
     def _dimension(self):
@@ -885,6 +1074,56 @@ class LayoutEditor(tk.Tk):
         parent.remove(self.selected)
         parent.insert(target, self.selected)
         self._refresh()
+
+    def _reparent_selected(self, new_parent: ET.Element, index: int) -> None:
+        """Move the selected node while preserving its absolute canvas position."""
+        if self.selected is None:
+            return
+        old_parent = parent_of(self.root_element, self.selected)
+        if old_parent is None or old_parent is new_parent:
+            return
+        absolute_x, absolute_y = absolute_position(self.root_element, self.selected)
+        new_parent_x, new_parent_y = absolute_position(self.root_element, new_parent)
+        self._remember_state()
+        old_parent.remove(self.selected)
+        new_parent.insert(max(0, min(index, len(new_parent))), self.selected)
+        self.selected.set("x", str(absolute_x - new_parent_x))
+        self.selected.set("y", str(absolute_y - new_parent_y))
+        self._refresh()
+
+    def indent_selected(self) -> None:
+        """Nest the selected node in the immediately preceding container."""
+        if self.selected is None:
+            return
+        parent = parent_of(self.root_element, self.selected)
+        if parent is None:
+            return
+        siblings = list(parent)
+        index = siblings.index(self.selected)
+        if index == 0:
+            self.status.configure(text="Aucun groupe précédent")
+            return
+        target = siblings[index - 1]
+        if target.tag not in {"composite", "translate", "frame"}:
+            self.status.configure(text="L’élément précédent n’est pas un groupe")
+            return
+        self._reparent_selected(target, len(target))
+        self.status.configure(text="Widget indenté dans le groupe précédent")
+
+    def outdent_selected(self) -> None:
+        """Move the selected node one level up in the XML hierarchy."""
+        if self.selected is None:
+            return
+        parent = parent_of(self.root_element, self.selected)
+        if parent is None or parent is self.root_element:
+            self.status.configure(text="Déjà au niveau racine")
+            return
+        grandparent = parent_of(self.root_element, parent)
+        if grandparent is None:
+            return
+        index = list(grandparent).index(parent) + 1
+        self._reparent_selected(grandparent, index)
+        self.status.configure(text="Widget désindenté")
 
     def _refresh(self) -> None:
         self.canvas.delete("all")

@@ -89,6 +89,8 @@ L’éditeur propose également une arborescence avec recherche, la duplication,
 
 La barre latérale est organisée en sections repliables : `Widgets`, `Arborescence`, `Options d’édition` et `Canvas`.
 
+Lorsqu’un widget est sélectionné, les flèches du clavier le déplacent d’un pixel ; `Maj` + flèche le déplace de 10 pixels.
+
 Le bouton `Publier sur GitHub` enregistre le layout courant, ne committe que ce fichier XML, puis le pousse sur la branche Git courante. Le dépôt doit être authentifié auprès de GitHub et le fichier doit se trouver dans le dépôt Git.
 
 ### Parapente
