@@ -8,11 +8,14 @@ even when a layout contains widgets that cannot be previewed without telemetry.
 from __future__ import annotations
 
 import argparse
+import re
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Iterable
 from xml.etree import ElementTree as ET
+
+from PIL import Image, ImageTk
 
 
 PALETTE = (
@@ -71,6 +74,16 @@ def preview_size(element: ET.Element) -> tuple[int, int]:
     return width, height
 
 
+def infer_canvas_size(path: Path | None, fallback: tuple[int, int] = (1920, 1080)) -> tuple[int, int]:
+    """Infer common 16:9 canvas sizes from layout filenames."""
+    if path is not None:
+        match = re.search(r"(?:^|_)(\d{3,5})(?:[-_.]|$)", path.stem)
+        if match:
+            width = int(match.group(1))
+            return width, round(width * 9 / 16)
+    return fallback
+
+
 class LayoutEditor(tk.Tk):
     """A small, dependency-free visual XML layout editor."""
 
@@ -81,6 +94,9 @@ class LayoutEditor(tk.Tk):
         self.minsize(980, 620)
         self.canvas_size = canvas_size
         self.layout_path = layout_path
+        self.zoom = 1.0
+        self.background_path: Path | None = None
+        self._background_photo = None
         self.root_element = ET.Element("layout")
         self.selected: ET.Element | None = None
         self._canvas_items: dict[int, ET.Element] = {}
@@ -102,7 +118,10 @@ class LayoutEditor(tk.Tk):
         toolbar.grid(row=0, column=0, columnspan=3, sticky="ew")
         ttk.Button(toolbar, text="Ouvrir", command=self.open_layout).pack(side="left")
         ttk.Button(toolbar, text="Enregistrer", command=self.save_layout).pack(side="left", padx=6)
+        ttk.Button(toolbar, text="Enregistrer sous…", command=self.save_layout_as).pack(side="left")
         ttk.Button(toolbar, text="Nouveau", command=self.new_layout).pack(side="left")
+        ttk.Button(toolbar, text="Image de fond", command=self.choose_background).pack(side="left", padx=(18, 6))
+        ttk.Button(toolbar, text="Ajuster à l’écran", command=self.fit_canvas).pack(side="left")
         self.status = ttk.Label(toolbar, text="Sélectionnez un élément")
         self.status.pack(side="right")
 
@@ -119,7 +138,7 @@ class LayoutEditor(tk.Tk):
         canvas_frame.grid(row=1, column=1, sticky="nsew", pady=(0, 10))
         canvas_frame.rowconfigure(0, weight=1)
         canvas_frame.columnconfigure(0, weight=1)
-        self.canvas = tk.Canvas(canvas_frame, background="#111827", highlightthickness=0, scrollregion=(0, 0, *self.canvas_size))
+        self.canvas = tk.Canvas(canvas_frame, background="#111827", highlightthickness=0)
         self.canvas.grid(row=0, column=0, sticky="nsew")
         xbar = ttk.Scrollbar(canvas_frame, orient="horizontal", command=self.canvas.xview)
         ybar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
@@ -143,12 +162,15 @@ class LayoutEditor(tk.Tk):
         self.root_element = ET.parse(path).getroot()
         self.selected = None
         self._refresh()
+        self.after_idle(self.fit_canvas)
 
     def open_layout(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("Layout XML", "*.xml"), ("Tous les fichiers", "*")])
         if path:
             try:
-                self.load(Path(path))
+                selected_path = Path(path)
+                self.canvas_size = infer_canvas_size(selected_path, self.canvas_size)
+                self.load(selected_path)
             except (ET.ParseError, OSError) as exc:
                 messagebox.showerror("Ouverture impossible", str(exc))
 
@@ -169,6 +191,42 @@ class LayoutEditor(tk.Tk):
         ET.indent(self.root_element, space="    ")
         ET.ElementTree(self.root_element).write(path, encoding="utf-8", xml_declaration=False)
         self.status.configure(text=f"Enregistré : {path.name}")
+
+    def save_layout_as(self) -> None:
+        chosen = filedialog.asksaveasfilename(
+            title="Enregistrer le layout sous…",
+            defaultextension=".xml",
+            filetypes=[("Layout XML", "*.xml"), ("Tous les fichiers", "*")],
+        )
+        if chosen:
+            self.layout_path = Path(chosen)
+            self.save_layout()
+
+    def choose_background(self) -> None:
+        chosen = filedialog.askopenfilename(
+            title="Choisir l’image de fond",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tous les fichiers", "*")],
+        )
+        if not chosen:
+            return
+        try:
+            with Image.open(chosen) as image:
+                image = image.convert("RGB")
+                image.thumbnail(self.canvas_size, Image.Resampling.LANCZOS)
+                background = Image.new("RGB", self.canvas_size, "#111827")
+                background.paste(image, ((self.canvas_size[0] - image.width) // 2, (self.canvas_size[1] - image.height) // 2))
+                self._background_photo = ImageTk.PhotoImage(background)
+            self.background_path = Path(chosen)
+            self._refresh()
+            self.status.configure(text=f"Fond : {self.background_path.name}")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Image impossible à ouvrir", str(exc))
+
+    def fit_canvas(self) -> None:
+        available_width = max(400, self.canvas.winfo_width() - 20)
+        available_height = max(300, self.canvas.winfo_height() - 20)
+        self.zoom = min(1.0, available_width / self.canvas_size[0], available_height / self.canvas_size[1])
+        self._refresh()
 
     def add_element(self, type_name: str) -> None:
         tag = "component"
@@ -194,6 +252,7 @@ class LayoutEditor(tk.Tk):
         self.root_element.append(element)
         self.selected = element
         self._refresh()
+        self.status.configure(text=f"Élément ajouté : {type_name}")
 
     def delete_selected(self) -> None:
         if self.selected is None:
@@ -208,11 +267,25 @@ class LayoutEditor(tk.Tk):
     def _refresh(self) -> None:
         self.canvas.delete("all")
         self._canvas_items.clear()
+        scaled_width = int(self.canvas_size[0] * self.zoom)
+        scaled_height = int(self.canvas_size[1] * self.zoom)
+        self.canvas.configure(scrollregion=(0, 0, scaled_width, scaled_height))
+        if self._background_photo is not None:
+            background = self._background_photo
+            if self.zoom != 1.0:
+                with Image.open(self.background_path) as image:
+                    image = image.convert("RGB")
+                    image.thumbnail(self.canvas_size, Image.Resampling.LANCZOS)
+                    background_image = Image.new("RGB", self.canvas_size, "#111827")
+                    background_image.paste(image, ((self.canvas_size[0] - image.width) // 2, (self.canvas_size[1] - image.height) // 2))
+                    background = ImageTk.PhotoImage(background_image.resize((scaled_width, scaled_height), Image.Resampling.LANCZOS))
+                    self._background_photo = background
+            self.canvas.create_image(0, 0, image=background, anchor="nw")
         # A light grid makes alignment easier without changing the saved layout.
         for x in range(0, self.canvas_size[0] + 1, 100):
-            self.canvas.create_line(x, 0, x, self.canvas_size[1], fill="#1f2937")
+            self.canvas.create_line(x * self.zoom, 0, x * self.zoom, scaled_height, fill="#1f2937")
         for y in range(0, self.canvas_size[1] + 1, 100):
-            self.canvas.create_line(0, y, self.canvas_size[0], y, fill="#1f2937")
+            self.canvas.create_line(0, y * self.zoom, scaled_width, y * self.zoom, fill="#1f2937")
         for element in iter_editable(self.root_element):
             self._draw_element(element)
         self._refresh_inspector()
@@ -220,17 +293,19 @@ class LayoutEditor(tk.Tk):
     def _draw_element(self, element: ET.Element) -> None:
         x, y = absolute_position(self.root_element, element)
         width, height = preview_size(element)
+        x, y = x * self.zoom, y * self.zoom
+        width, height = width * self.zoom, height * self.zoom
         selected = element is self.selected
         fill = "#312e81" if selected else "#1f4b63"
         outline = "#c4b5fd" if selected else "#5eead4"
         rect = self.canvas.create_rectangle(x, y, x + width, y + height, fill=fill, outline=outline, width=2)
         self._canvas_items[rect] = element
         label = element.attrib.get("name") or element.attrib.get("type") or element.tag
-        label_item = self.canvas.create_text(x + 10, y + 10, anchor="nw", text=label, fill="#f8fafc", font=("TkDefaultFont", 11, "bold"))
+        label_item = self.canvas.create_text(x + 10 * self.zoom, y + 10 * self.zoom, anchor="nw", text=label, fill="#f8fafc", font=("TkDefaultFont", max(7, int(11 * self.zoom)), "bold"))
         self._canvas_items[label_item] = element
         detail = element.text.strip() if element.text and element.text.strip() else ""
         if detail:
-            text_item = self.canvas.create_text(x + 10, y + 34, anchor="nw", text=detail[:30], fill="#cbd5e1")
+            text_item = self.canvas.create_text(x + 10 * self.zoom, y + 34 * self.zoom, anchor="nw", text=detail[:30], fill="#cbd5e1", font=("TkDefaultFont", max(6, int(10 * self.zoom))))
             self._canvas_items[text_item] = element
         if selected:
             handle = self.canvas.create_rectangle(x + width - 12, y + height - 12, x + width, y + height, fill="#c4b5fd", outline="")
@@ -250,8 +325,8 @@ class LayoutEditor(tk.Tk):
         self.selected = element
         x, y = absolute_position(self.root_element, element)
         width, height = preview_size(element)
-        cx = self.canvas.canvasx(event.x)
-        cy = self.canvas.canvasy(event.y)
+        cx = self.canvas.canvasx(event.x) / self.zoom
+        cy = self.canvas.canvasy(event.y) / self.zoom
         if cx >= x + width - 18 and cy >= y + height - 18:
             self._resize_start = (int(cx), int(cy))
             self._resize_origin = (width, height)
@@ -264,7 +339,7 @@ class LayoutEditor(tk.Tk):
     def _drag(self, event) -> None:
         if self.selected is None:
             return
-        cx, cy = int(self.canvas.canvasx(event.x)), int(self.canvas.canvasy(event.y))
+        cx, cy = int(self.canvas.canvasx(event.x) / self.zoom), int(self.canvas.canvasy(event.y) / self.zoom)
         if self._resize_start and self._resize_origin:
             width = max(24, self._resize_origin[0] + cx - self._resize_start[0])
             height = max(24, self._resize_origin[1] + cy - self._resize_start[1])
@@ -347,13 +422,16 @@ class LayoutEditor(tk.Tk):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Éditeur interactif de layouts XML GoPro Overlay")
     parser.add_argument("layout", nargs="?", type=Path, help="Layout XML à ouvrir")
-    parser.add_argument("--overlay-size", default="1920x1080", help="Taille logique du canvas, ex. 1920x1080")
+    parser.add_argument("--overlay-size", help="Taille logique du canvas, ex. 1920x1080 (déduite du nom du fichier si absente)")
     args = parser.parse_args()
-    try:
-        width, height = (int(value) for value in args.overlay_size.lower().split("x", 1))
-    except ValueError as exc:
-        parser.error(f"--overlay-size invalide : {exc}")
-    LayoutEditor(args.layout, (width, height)).mainloop()
+    if args.overlay_size:
+        try:
+            canvas_size = tuple(int(value) for value in args.overlay_size.lower().split("x", 1))
+        except ValueError as exc:
+            parser.error(f"--overlay-size invalide : {exc}")
+    else:
+        canvas_size = infer_canvas_size(args.layout)
+    LayoutEditor(args.layout, canvas_size).mainloop()
 
 
 if __name__ == "__main__":
