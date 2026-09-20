@@ -61,9 +61,9 @@ script-files= [
     "bin/gopro-extract.py",
     "bin/gopro-join.py",
     "bin/gopro-layout.py",
+    "bin/gopro-layout-editor.py",
     "bin/gopro-rename.py",
     "bin/gopro-to-csv.py",
     "bin/gopro-to-gpx.py",
     "bin/gopro-debug.py",
 ]
-

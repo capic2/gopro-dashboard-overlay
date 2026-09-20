@@ -75,6 +75,16 @@ source venv/bin/activate
 gopro-dashboard.py --use-gpx-only --overlay-size 1920x1080 --gpx ./8.gpx --layout xml --layout-xml ./layout_karting_1080.xml ./karting.mp4 ./karting_overlay.mp4
 ```
 
+## Éditeur interactif de layout
+
+Un éditeur graphique permet de créer et modifier un layout XML sans éditer les coordonnées à la main :
+
+```shell
+venv/bin/gopro-layout-editor.py ./layout_karting_1080.xml --overlay-size 1920x1080
+```
+
+Les éléments peuvent être ajoutés depuis la palette, sélectionnés, déplacés à la souris, redimensionnés avec la poignée violette, supprimés avec `Suppr` et configurés dans le panneau de droite. `Enregistrer` conserve le format XML utilisé par `gopro-dashboard.py`.
+
 ### Parapente
 
 `venv/bin/gopro-dashboard.py --use-gpx-only --overlay-size 1920x1080 --gpx ./merged.gpx --layout xml --layout-xml ./layout_parapente_1080.xml video_entree.mp4 video_sortie.mp4`
