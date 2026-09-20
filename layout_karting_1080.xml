@@ -1,13 +1,13 @@
 <layout>
 
     <!-- Date -->
-    <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="32" x="20" y="20"/>
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" size="32" x="20" y="20" name="datetime_1"/>
 
     <!-- ==================== HEART RATE - Haut droite ==================== -->
     <composite x="1780" y="20" name="heart_rate">
-        <component type="icon" x="0" y="0" size="32" file="heartbeat.png"/>
-        <component type="metric" x="40" y="5" metric="hr" dp="0" size="28" align="left"/>
-        <component type="metric_unit" metric="hr" x="90" y="5" size="18" align="left">{:~P}</component>
+        <component type="icon" x="0" y="0" size="32" file="heartbeat.png" name="icon_heartbeat_1"/>
+        <component type="metric" x="40" y="5" metric="hr" dp="0" size="28" align="left" name="metric_hr_1"/>
+        <component type="metric_unit" metric="hr" x="90" y="5" size="18" align="left" name="metric_unit_hr_1">{:~P}</component>
     </composite>
 
     <component type="lap_times_table"
@@ -17,7 +17,7 @@
                max_laps="8"
                size="18"
                show_best="true"
-               show_max_speed="true"/>
+               show_max_speed="true" name="lap_times_table_1"/>
 
 
     <component type="lap_chronometer"
@@ -26,7 +26,7 @@
                width="280"
                height="100"
                size="20"
-               show_lap_number="true"/>
+               show_lap_number="true" name="lap_chronometer_1"/>
 
 
     <!-- ==================== VITESSE + RPM - Coin bas droite ==================== -->
@@ -34,25 +34,25 @@
         <!-- ==================== TEMPÉRATURES (côte à côté) ==================== -->
         <composite x="0" y="120" name="temps">
             <!-- Température Eau -->
-            <component type="icon" x="0" y="0" size="36" file="thermometer-1.png"/>
-            <component type="metric" x="30" y="5" metric="temp" dp="0" size="22" align="left"/>
-            <component type="text" x="65" y="5" size="16" align="left">°C</component>
+            <component type="icon" x="0" y="0" size="36" file="thermometer-1.png" name="icon_thermometer_1_1"/>
+            <component type="metric" x="30" y="5" metric="temp" dp="0" size="22" align="left" name="metric_temp_1"/>
+            <component type="text" x="65" y="5" size="16" align="left" name="text_c_1">°C</component>
 
             <!-- Température Échappement -->
-            <component type="icon" x="100" y="0" size="36" file="exhaust.png"/>
-            <component type="metric" x="140" y="5" metric="exhaust_temp" dp="0" size="22" align="left"/>
-            <component type="text" x="180" y="5" size="16" align="left">°C</component>
+            <component type="icon" x="100" y="0" size="36" file="exhaust.png" name="icon_exhaust_1"/>
+            <component type="metric" x="140" y="5" metric="exhaust_temp" dp="0" size="22" align="left" name="metric_exhaust_temp_1"/>
+            <component type="text" x="180" y="5" size="16" align="left" name="text_c_2">°C</component>
         </composite>
 
         <!-- VITESSE - Tachymètre OK, chiffre réduit -->
         <composite x="0" y="180" name="speed_gauge">
             <component type="msi" metric="speed" textsize="16" needle="1" units="kph"
-                       size="200" end="120" yellow="100" green="80"/>
-            <component type="metric" metric="calculated_gear" x="100" y="45" size="30" align="centre" dp="0"/>
+                       size="200" end="120" yellow="100" green="80" name="msi_speed_1"/>
+            <component type="metric" metric="calculated_gear" x="100" y="45" size="30" align="centre" dp="0" name="metric_calculated_gear_1"/>
             <component type="metric" metric="speed" units="kph" dp="0" size="40"
-                       x="100" y="140" align="centre"/>
+                       x="100" y="140" align="centre" name="metric_speed_1"/>
             <component type="metric_unit" metric="speed" units="kph" size="18"
-                       x="120" y="178" align="centre">{:~P}
+                       x="120" y="178" align="centre" name="metric_unit_speed_1">{:~P}
             </component>
         </composite>
 
@@ -66,7 +66,7 @@
                    segment_spacing="2"
                    max_rpm="15000"
                    size="20"
-                   show_label="true"/>
+                   show_label="true" name="rpm_bar_1"/>
     </composite>
 
 
@@ -79,14 +79,14 @@
                bg_colour="0,0,0,220"
                grid_colour="80,80,80,150"
                point_colour="255,50,50,255"
-               line_colour="255,50,50,150"/>
+               line_colour="255,50,50,150" name="gforce_circle_1"/>
 
     <!-- ==================== CARTE - Point mobile sans traces ==================== -->
-    <translate x="20" y="850">
-        <component type="moving_map" size="200" rotate="false" corner_radius="20"/>
+    <translate x="20" y="850" name="translate_1">
+        <component type="moving_map" size="200" rotate="false" corner_radius="20" name="moving_map_1"/>
         <component type="metric_unit" metric="odo" units="km" size="12"
-                   x="250" y="170">{:~P}
+                   x="250" y="170" name="metric_unit_odo_1">{:~P}
         </component>
-        <component type="metric" metric="odo" units="km" x="210" y="180" size="20"/>
+        <component type="metric" metric="odo" units="km" x="210" y="180" size="20" name="metric_odo_1"/>
     </translate>
 </layout>

@@ -1,45 +1,45 @@
 <layout>
-	<translate x="16">
+	<translate x="16" name="translate_1">
 		<composite name="metrics" x="0">
-			<component type="datetime" y="16" format="%d.%m.%Y" size="24" align="left"/>
-			<component type="datetime" y="45" format="%H:%M:%S" size="32" align="left"/>
-			<translate y="90">
-				<component type="icon" x="0"  file="mountain.png" size="48"/>			
-				<component type="text" x="65"  size="16">ALT (m)</component>
-				<component type="metric" x="55" y="20" align="left"  metric="alt" dp="1" size="26" />
+			<component type="datetime" y="16" format="%d.%m.%Y" size="24" align="left" name="datetime_1"/>
+			<component type="datetime" y="45" format="%H:%M:%S" size="32" align="left" name="datetime_2"/>
+			<translate y="90" name="translate_2">
+				<component type="icon" x="0"  file="mountain.png" size="48" name="icon_mountain_1"/>
+				<component type="text" x="65"  size="16" name="text_alt_m_1">ALT (m)</component>
+				<component type="metric" x="55" y="20" align="left"  metric="alt" dp="1" size="26"  name="metric_alt_1"/>
 			</translate>
-			<translate y="150">
-				<component type="icon" x="0"  file="slope-triangle.png" size="48"/>			
-				<component type="text" x="65"  size="16">SLP (%)</component>
-				<component type="metric" x="70" y="20" align="left" metric="gradient" dp="1" size="26" />
+			<translate y="150" name="translate_3">
+				<component type="icon" x="0"  file="slope-triangle.png" size="48" name="icon_slope_triangle_1"/>
+				<component type="text" x="65"  size="16" name="text_slp_1">SLP (%)</component>
+				<component type="metric" x="70" y="20" align="left" metric="gradient" dp="1" size="26"  name="metric_gradient_1"/>
 			</translate>	
 		</composite>
 				
-		<translate x="0" y="690">
-			<component type="msi" metric="speed" textsize="16" needle="0" units="kph" />
-			<translate x="128"  y="90">
-					<component type="metric" metric="speed" units="kph" dp="0" size="66" align="centre"/>
+		<translate x="0" y="690" name="translate_4">
+			<component type="msi" metric="speed" textsize="16" needle="0" units="kph"  name="msi_speed_1"/>
+			<translate x="128"  y="90" name="translate_5">
+					<component type="metric" metric="speed" units="kph" dp="0" size="66" align="centre" name="metric_speed_1"/>
 			</translate>	
-			<translate x="128"  y="220">
-					<component type="text" size="18" align="centre">km/h</component>
+			<translate x="128"  y="220" name="translate_6">
+					<component type="text" size="18" align="centre" name="text_km_h_1">km/h</component>
 			</translate>	
 			
-			<translate x="0" y="260" >
-				<component type="bar" width="128" min="-3" max="0" height="40" metric="accel" outline-width="2" bar="255,157,157" h-neg="255,157,157" h-pos="255,157,157" zero="0,0,0,0"/>
-				<component x="63" y="11" type="text" size="16" align="centre">BRAKE</component>
-				<translate x="127" >
-					<component type="bar" width="128" min="0" max="3" height="40" metric="accel" outline-width="2" bar="157,157,255" h-neg="157,157,255" h-pos="157,157,255"  zero="0,0,0,0"/>
-					<component x="63" y="11" type="text" size="16" align="centre">THROTTLE</component>
+			<translate x="0" y="260"  name="translate_7">
+				<component type="bar" width="128" min="-3" max="0" height="40" metric="accel" outline-width="2" bar="255,157,157" h-neg="255,157,157" h-pos="255,157,157" zero="0,0,0,0" name="bar_accel_1"/>
+				<component x="63" y="11" type="text" size="16" align="centre" name="text_brake_1">BRAKE</component>
+				<translate x="127"  name="translate_8">
+					<component type="bar" width="128" min="0" max="3" height="40" metric="accel" outline-width="2" bar="157,157,255" h-neg="157,157,255" h-pos="157,157,255"  zero="0,0,0,0" name="bar_accel_2"/>
+					<component x="63" y="11" type="text" size="16" align="centre" name="text_throttle_1">THROTTLE</component>
 				</translate>
 			</translate>			
 		</translate>
 		
-		<translate x="1632" y="16">
-			<frame width="256" opacity="0.6" height="256" cr="20" fo="20">
+		<translate x="1632" y="16" name="translate_9">
+			<frame width="256" opacity="0.6" height="256" cr="20" fo="20" name="frame_1">
 				<component type="moving_map"  name="moving_map" size="256" zoom="15"/>
 			</frame>
-			<frame y="256" width="256" opacity="0.6" height="256" cr="20" fo="20">
-					<component type="moving_journey_map" size="256" zoom="14" />
+			<frame y="256" width="256" opacity="0.6" height="256" cr="20" fo="20" name="frame_2">
+					<component type="moving_journey_map" size="256" zoom="14"  name="moving_journey_map_1"/>
 			</frame>
 		</translate>
 			

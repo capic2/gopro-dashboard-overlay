@@ -1,45 +1,45 @@
 <layout>
-	<translate x="32">
+	<translate x="32" name="translate_1">
 		<composite name="metrics" x="0">
-			<component type="datetime" y="32" format="%d.%m.%Y" size="48"  outline_width="4" align="left"/>
-			<component type="datetime" y="90" format="%H:%M:%S" size="64"  outline_width="4" align="left"/>
-			<translate y="180">
-				<component type="icon" x="0"  file="mountain.png" size="96"/>			
-				<component type="text" x="130"  outline_width="4" size="32">ALT (m)</component>
-				<component type="metric" x="110" y="40" align="left"  outline_width="4" metric="alt" dp="1" size="52" />
+			<component type="datetime" y="32" format="%d.%m.%Y" size="48"  outline_width="4" align="left" name="datetime_1"/>
+			<component type="datetime" y="90" format="%H:%M:%S" size="64"  outline_width="4" align="left" name="datetime_2"/>
+			<translate y="180" name="translate_2">
+				<component type="icon" x="0"  file="mountain.png" size="96" name="icon_mountain_1"/>
+				<component type="text" x="130"  outline_width="4" size="32" name="text_alt_m_1">ALT (m)</component>
+				<component type="metric" x="110" y="40" align="left"  outline_width="4" metric="alt" dp="1" size="52"  name="metric_alt_1"/>
 			</translate>
-			<translate y="300">
-				<component type="icon" x="0"  file="slope-triangle.png" size="96"/>			
-				<component type="text" x="130"  outline_width="4" size="32">SLP (%)</component>
-				<component type="metric" x="140" y="40" align="left" metric="gradient" dp="1" outline_width="4" size="52" />
+			<translate y="300" name="translate_3">
+				<component type="icon" x="0"  file="slope-triangle.png" size="96" name="icon_slope_triangle_1"/>
+				<component type="text" x="130"  outline_width="4" size="32" name="text_slp_1">SLP (%)</component>
+				<component type="metric" x="140" y="40" align="left" metric="gradient" dp="1" outline_width="4" size="52"  name="metric_gradient_1"/>
 			</translate>	
 		</composite>
 				
-		<translate x="0" y="1380">
-			<component type="msi2" metric="speed" outline="4" textsize="32" size="512" units="kph" />
-			<translate x="256"  y="200">
-					<component type="metric" metric="speed" units="kph" dp="0" size="100" outline_width="4" align="centre"/>
+		<translate x="0" y="1380" name="translate_4">
+			<component type="msi2" metric="speed" outline="4" textsize="32" size="512" units="kph"  name="msi2_speed_1"/>
+			<translate x="256"  y="200" name="translate_5">
+					<component type="metric" metric="speed" units="kph" dp="0" size="100" outline_width="4" align="centre" name="metric_speed_1"/>
 			</translate>	
-			<translate x="256"  y="440">
-					<component type="text" size="36" outline_width="4" align="centre">km/h</component>
+			<translate x="256"  y="440" name="translate_6">
+					<component type="text" size="36" outline_width="4" align="centre" name="text_km_h_1">km/h</component>
 			</translate>	
 			
-			<translate x="0" y="520" >
-				<component type="bar" width="256" min="-3" max="0" height="80" metric="accel" outline-width="4" bar="255,157,157" h-neg="255,157,157" h-pos="255,157,157" zero="0,0,0,0"/>
-				<component x="126" y="22" type="text" outline_width="4" size="32" align="centre">BRAKE</component>
-				<translate x="254" >
-					<component type="bar" width="256" min="0" max="3" height="80" metric="accel" outline-width="4" bar="157,157,255" h-neg="157,157,255" h-pos="157,157,255"  zero="0,0,0,0"/>
-					<component x="126" y="22" type="text" outline_width="4" size="32" align="centre">THROTTLE</component>
+			<translate x="0" y="520"  name="translate_7">
+				<component type="bar" width="256" min="-3" max="0" height="80" metric="accel" outline-width="4" bar="255,157,157" h-neg="255,157,157" h-pos="255,157,157" zero="0,0,0,0" name="bar_accel_1"/>
+				<component x="126" y="22" type="text" outline_width="4" size="32" align="centre" name="text_brake_1">BRAKE</component>
+				<translate x="254"  name="translate_8">
+					<component type="bar" width="256" min="0" max="3" height="80" metric="accel" outline-width="4" bar="157,157,255" h-neg="157,157,255" h-pos="157,157,255"  zero="0,0,0,0" name="bar_accel_2"/>
+					<component x="126" y="22" type="text" outline_width="4" size="32" align="centre" name="text_throttle_1">THROTTLE</component>
 				</translate>
 			</translate>			
 		</translate>
 		
-		<translate x="3264" y="32">
-			<frame width="512" opacity="0.6" height="512" cr="40" fo="40">
+		<translate x="3264" y="32" name="translate_9">
+			<frame width="512" opacity="0.6" height="512" cr="40" fo="40" name="frame_1">
 				<component type="moving_map"  name="moving_map" size="512" zoom="15"/>
 			</frame>
-			<frame y="512" width="512" opacity="0.6" height="512" cr="40" fo="40">
-					<component type="moving_journey_map" size="512" zoom="14" />
+			<frame y="512" width="512" opacity="0.6" height="512" cr="40" fo="40" name="frame_2">
+					<component type="moving_journey_map" size="512" zoom="14"  name="moving_journey_map_1"/>
 			</frame>
 		</translate>
 			

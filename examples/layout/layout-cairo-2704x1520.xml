@@ -1,40 +1,40 @@
 <layout>
-    <translate x="50" y="1000">
-        <component type="text" size="32" y="-32">cairo-gauge-marker</component>
-        <component size="512" type="cairo-gauge-marker" metric="speed" units="kph" max="45" start="90" tick-rgb="255,2555,255,128" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128"/>
-        <translate y="190" x="256">
-            <component type="metric" metric="speed" units="kph" align="centre" dp="0" size="120"/>
-            <component type="text" y="120" size="32" align="centre">kph</component>
+    <translate x="50" y="1000" name="translate_1">
+        <component type="text" size="32" y="-32" name="text_cairo_gauge_marker_1">cairo-gauge-marker</component>
+        <component size="512" type="cairo-gauge-marker" metric="speed" units="kph" max="45" start="90" tick-rgb="255,2555,255,128" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128" name="cairo_gauge_marker_speed_1"/>
+        <translate y="190" x="256" name="translate_2">
+            <component type="metric" metric="speed" units="kph" align="centre" dp="0" size="120" name="metric_speed_1"/>
+            <component type="text" y="120" size="32" align="centre" name="text_kph_1">kph</component>
         </translate>
     </translate>
 
-    <translate x="50" y="100">
-        <component type="text" size="32" y="-32">cairo-gauge-round</component>
-        <component size="512" type="cairo-gauge-round-annotated" metric="speed" units="kph" max="60" start="90" sectors="6"/>
-        <translate y="190" x="256">
-            <component type="metric" metric="speed" units="kph" align="centre" dp="0" size="120"/>
-            <component type="text" y="120" size="32" align="centre">kph</component>
+    <translate x="50" y="100" name="translate_3">
+        <component type="text" size="32" y="-32" name="text_cairo_gauge_round_1">cairo-gauge-round</component>
+        <component size="512" type="cairo-gauge-round-annotated" metric="speed" units="kph" max="60" start="90" sectors="6" name="cairo_gauge_round_annotated_speed_1"/>
+        <translate y="190" x="256" name="translate_4">
+            <component type="metric" metric="speed" units="kph" align="centre" dp="0" size="120" name="metric_speed_2"/>
+            <component type="text" y="120" size="32" align="centre" name="text_kph_2">kph</component>
         </translate>
     </translate>
 
-    <translate x="1850">
-        <translate  y="50">
-            <component type="text" size="32" y="-16">moving-map</component>
-            <translate y="32">
-                <component type="moving-map" size="768" opacity="0.85" zoom="17" corner_radius="30"/>
+    <translate x="1850" name="translate_5">
+        <translate  y="50" name="translate_6">
+            <component type="text" size="32" y="-16" name="text_moving_map_1">moving-map</component>
+            <translate y="32" name="translate_7">
+                <component type="moving-map" size="768" opacity="0.85" zoom="17" corner_radius="30" name="moving_map_1"/>
             </translate>
         </translate>
-        <translate y="900">
-            <component type="text" size="32">cairo-circuit-map</component>
-            <translate y="32">
-                <component type="cairo-circuit-map" size="512" line-width="0.05" rotate="180" loc-size="0.08" loc-fill="255,0,0,128" loc-outline="0,0,0,0"/>
+        <translate y="900" name="translate_8">
+            <component type="text" size="32" name="text_cairo_circuit_map_1">cairo-circuit-map</component>
+            <translate y="32" name="translate_9">
+                <component type="cairo-circuit-map" size="512" line-width="0.05" rotate="180" loc-size="0.08" loc-fill="255,0,0,128" loc-outline="0,0,0,0" name="cairo_circuit_map_1"/>
             </translate>
         </translate>
     </translate>
 
-    <translate y="1250" x="600">
-        <component type="text" y="-32" size="32">chart</component>
-        <component type="chart" height="200" seconds="500" samples="1024" bg="0,0,0,0" textsize="48" metric="alt" units="m"/>
-        <component type="text" y="80" size="32" rgb="255,255,255,128">Alt(m)</component>
+    <translate y="1250" x="600" name="translate_10">
+        <component type="text" y="-32" size="32" name="text_chart_1">chart</component>
+        <component type="chart" height="200" seconds="500" samples="1024" bg="0,0,0,0" textsize="48" metric="alt" units="m" name="chart_alt_1"/>
+        <component type="text" y="80" size="32" rgb="255,255,255,128" name="text_alt_m_1">Alt(m)</component>
     </translate>
 </layout>

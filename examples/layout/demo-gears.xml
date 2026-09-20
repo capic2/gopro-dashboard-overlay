@@ -1,26 +1,26 @@
 <layout>
-    <translate x="16">
+    <translate x="16" name="translate_1">
 
-        <translate x="50" y="500">
-            <component type="text" size="32" y="-32">Front Gear</component>
-            <component size="256" type="cairo-gauge-marker" metric="gear.front" max="2" start="90" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128"/>
-            <translate y="70" x="128">
-                <component type="metric" metric="gear.front" align="centre" dp="0" size="120"/>
+        <translate x="50" y="500" name="translate_2">
+            <component type="text" size="32" y="-32" name="text_front_gear_1">Front Gear</component>
+            <component size="256" type="cairo-gauge-marker" metric="gear.front" max="2" start="90" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128" name="cairo_gauge_marker_gear_front_1"/>
+            <translate y="70" x="128" name="translate_3">
+                <component type="metric" metric="gear.front" align="centre" dp="0" size="120" name="metric_gear_front_1"/>
             </translate>
         </translate>
 
-        <translate x="450" y="500">
-            <component type="text" size="32" y="-32">Rear Gear</component>
-            <component size="256" type="cairo-gauge-marker" metric="gear.rear" max="11" start="90" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128"/>
-            <translate y="70" x="128">
-                <component type="metric" metric="gear.rear" align="centre" dp="0" size="120"/>
+        <translate x="450" y="500" name="translate_4">
+            <component type="text" size="32" y="-32" name="text_rear_gear_1">Rear Gear</component>
+            <component size="256" type="cairo-gauge-marker" metric="gear.rear" max="11" start="90" background-rgb="0,0,0,64" gauge-rgb="255,0,0,64" dot-inner-rgb="255,0,0,128" name="cairo_gauge_marker_gear_rear_1"/>
+            <translate y="70" x="128" name="translate_5">
+                <component type="metric" metric="gear.rear" align="centre" dp="0" size="120" name="metric_gear_rear_1"/>
             </translate>
         </translate>
 
-        <translate x="100" y="350">
+        <translate x="100" y="350" name="translate_6">
             <component type="chart" name="chart" units="none" metric="gear.rear" fill="177,26,22" values="false"/>
-            <translate x="230" y="40">
-                <component type="metric" metric="gear.rear" dp="0"/>
+            <translate x="230" y="40" name="translate_7">
+                <component type="metric" metric="gear.rear" dp="0" name="metric_gear_rear_2"/>
             </translate>
         </translate>
 
