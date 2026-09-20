@@ -1,80 +1,73 @@
 <layout>
-    <!-- date et heure -->
-    <component type="datetime" format="%d/%m/%Y %H:%M:%S" cache="false" size="64" x="20" y="20" name="datetime_1"/>
-
-    <!-- vitesse sol en km/h -->
+    <component type="datetime" format="%d/%m/%Y %H:%M:%S" cache="false" size="64" x="20" y="20" name="datetime_1" />
     <composite x="3470" y="1780" name="speed">
-       <component type="msi" metric="speed" textsize="28" needle="1" units="kph" size="320" end="80" yellow="80" green="80" name="msi_speed_1"/>
-       <component type="metric" metric="speed" units="kph" dp="0" size="72" x="160"  y="240" align="centre" name="metric_speed_1"/>
-       <component type="metric_unit" metric="speed" units="kph" size="36"  x="160"  y="320" align="centre" name="metric_unit_speed_1">{:~P}</component>
+        <component type="msi" metric="speed" textsize="28" needle="1" units="kph" size="320" end="80" yellow="80" green="80" name="msi_speed_1" />
+        <component type="metric" metric="speed" units="kph" dp="0" size="72" x="160" y="240" align="centre" name="metric_speed_1" />
+        <component type="metric_unit" metric="speed" units="kph" size="36" x="160" y="320" align="centre" name="metric_unit_speed_1">{:~P}</component>
     </composite>
-
-    <!-- bpm -->
     <composite x="3800" y="20" name="bpm">
         <component type="metric_unit" metric="hr" x="-140" y="0" size="32" align="right" name="metric_unit_hr_1">{:~P}</component>
-        <component type="icon" x="-128" y="0" file="heartbeat.png" size="80" name="icon_heartbeat_1"/>
-        <component type="metric" x="-140" y="36" metric="hr" dp="0" size="64" align="right" name="metric_hr_1"/>
-       <composite x="-200" y="100" name="composite_1">
-          <composite x="-20" name="bpm_min">
-             <component type="text" size="24" align="right" name="text_min_1">min</component>
-             <component type="custom_calc" y="20" size="36" dp="0"  expression="precalc.get('min_hr', 0)" align="right" name="custom_calc_1"/>
-          </composite>
-          <composite x="50" name="bpm_max">
-             <component type="text" size="24" align="right" name="text_max_1">max</component>
-             <component type="custom_calc" y="20" size="36" dp="0"  expression="precalc.get('max_hr', 0)" align="right" name="custom_calc_2"/>
-          </composite>
-       </composite>
+        <component type="icon" x="-128" y="45" file="heartbeat.png" size="80" name="icon_heartbeat_1" />
+        <component type="metric" x="-140" y="36" metric="hr" dp="0" size="64" align="right" name="metric_hr_1" />
+        <composite x="-200" y="100" name="composite_1">
+            <composite x="-20" name="bpm_min">
+                <component type="text" size="24" align="right" name="text_min_1">min</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('min_hr', 0)" align="right" name="custom_calc_1" />
+            </composite>
+            <composite x="50" name="bpm_max">
+                <component type="text" size="24" align="right" name="text_max_1">max</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('max_hr', 0)" align="right" name="custom_calc_2" />
+            </composite>
+        </composite>
     </composite>
-
-    <!-- altitude -->
     <composite x="3800" y="220" name="alt">
-       <component type="metric_unit" metric="alt" x="-140" y="0" size="32" align="right" name="metric_unit_alt_1">{:~P}</component>
-       <component type="icon" x="-128" y="0" file="mountain.png" size="80" name="icon_mountain_1"/>
-       <component type="metric" metric="alt" x="-140" y="36" dp="0" size="64" align="right"  name="metric_alt_1"/>
-       <composite x="-220" y="100" name="composite_2">
-          <composite x="0" name="alt-min">
-             <component type="text" size="24" align="right" name="text_min_2">min</component>
-             <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('min_alt', 0)" align="right" name="custom_calc_3"/>
-          </composite>
-          <composite x="80" name="alt_max">
-             <component type="text" size="24" align="right" name="text_max_2">max</component>
-             <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('max_alt', 0)" align="right" name="custom_calc_4"/>
-          </composite>
-       </composite>
+        <component type="metric_unit" metric="alt" x="-140" y="0" size="32" align="right" name="metric_unit_alt_1">{:~P}</component>
+        <component type="icon" x="-128" y="45" file="mountain.png" size="80" name="icon_mountain_1" />
+        <component type="metric" metric="alt" x="-140" y="36" dp="0" size="64" align="right" name="metric_alt_1" />
+        <composite x="-220" y="100" name="composite_2">
+            <composite x="0" name="alt-min">
+                <component type="text" size="24" align="right" name="text_min_2">min</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('min_alt', 0)" align="right" name="custom_calc_3" />
+            </composite>
+            <composite x="80" name="alt_max">
+                <component type="text" size="24" align="right" name="text_max_2">max</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('max_alt', 0)" align="right" name="custom_calc_4" />
+            </composite>
+        </composite>
     </composite>
-
-    <!-- dénivelé -->
     <composite x="3800" y="420" name="deniv">
-       <component type="text" x="-140" size="32" align="right" name="text_m_1">m</component>
-       <component type="icon" x="-128" y="0" file="slope.png" size="80"  name="icon_slope_1"/>
-       <component type="custom-calc" x="-140" y="36" expression="precalc.get('total_gain', 0)" label="D+" dp="0" size="64" align="right"  name="custom_calc_d_1"/>
-       <component type="custom-calc" x="-140" y="100" expression="precalc.get('total_loss', 0)" label="D-" dp="0" size="64" align="right"  name="custom_calc_d_2"/>
+        <component type="text" x="-140" size="32" align="right" name="text_m_1">m</component>
+        <component type="icon" x="-128" y="45" file="slope.png" size="80" name="icon_slope_1" />
+        <component type="custom-calc" x="-140" y="36" expression="precalc.get('total_gain', 0)" label="D+" dp="0" size="64" align="right" name="custom_calc_d_1" />
+        <component type="custom-calc" x="-140" y="100" expression="precalc.get('total_loss', 0)" label="D-" dp="0" size="64" align="right" name="custom_calc_d_2" />
     </composite>
-
     <composite x="3800" y="620" name="vario">
-       <component type="text" x="-140" size="32" align="right" name="text_m_s_1">m/s</component>
-       <component type="icon" x="-128" y="0" file="slope-triangle.png" size="80"  name="icon_slope_triangle_1"/>
-       <component type="custom-calc" x="-140" y="36" dp="2" size="64" align="right" expression="vspeed" name="custom_calc_5"/>
+        <component type="text" x="-140" size="32" align="right" name="text_m_s_1">m/s</component>
+        <component type="icon" x="-128" y="45" file="slope-triangle.png" size="80" name="icon_slope_triangle_1" />
+        <component type="custom-calc" x="-140" y="36" dp="2" size="64" align="right" expression="vspeed" name="custom_calc_5" />
+        <composite x="-200" y="100" name="composite-vspeed">
+            <composite x="-20" name="vario_min">
+                <component type="text" size="24" align="right" name="text_vario_min">min</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('min_vspeed', 0)" align="right" name="custom_vario_min" />
+            </composite>
+            <composite x="50" name="bpm_max">
+                <component type="text" size="24" align="right" name="text_vario_max">max</component>
+                <component type="custom_calc" y="20" size="36" dp="0" expression="precalc.get('max_vspeed', 0)" align="right" name="custom_calc_max_vario" x="1" />
+            </composite>
+        </composite>
     </composite>
-
-    <!-- carte -->
     <translate x="20" y="1540" name="translate_1">
-       <frame  width="600" height="600" cr="40" name="frame_1">
-           <!--<component type="video" size="600" fit="cover" id="pip" offset="0"/>-->
-        <!--<component type="journey_map" size="440" opacity="0.7"  />-->
+        <frame width="700" height="700" cr="40" name="frame_1">
+           
+        
         </frame>
-
     </translate>
-
-    <composite x="625" y="1700" name="deco/attero">
+    <composite x="720" y="1700" name="deco/attero">
         <component type="text" size="32" name="text_deco_m_1">Deco (m)</component>
-        <component type="custom-calc" y="30" expression="state.setdefault('alt_start', alt)" dp="0" size="64"  name="custom_calc_6"/>
-
+        <component type="custom-calc" y="30" expression="state.setdefault('alt_start', alt)" dp="0" size="64" name="custom_calc_6" />
         <component type="text" y="120" size="32" name="text_attero_m_1">Attero (m)</component>
-        <component type="custom-calc" y="160" expression="precalc.get('min_alt', 0)" dp="0" size="64"   name="custom_calc_7"/>
-
-        <!-- distance -->
+        <component type="custom-calc" y="160" expression="precalc.get('min_alt', 0)" dp="0" size="64" name="custom_calc_7" />
         <component type="metric_unit" metric="odo" y="290" size="32" name="metric_unit_odo_1">Distance ({:~P})</component>
-        <component type="metric" metric="odo"  y="330" size="64" name="metric_odo_1"/>
+        <component type="metric" metric="odo" y="330" size="64" name="metric_odo_1" />
     </composite>
 </layout>
