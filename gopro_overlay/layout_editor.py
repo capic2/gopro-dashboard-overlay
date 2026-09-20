@@ -121,6 +121,10 @@ class LayoutEditor(tk.Tk):
         ttk.Button(toolbar, text="Enregistrer sous…", command=self.save_layout_as).pack(side="left")
         ttk.Button(toolbar, text="Nouveau", command=self.new_layout).pack(side="left")
         ttk.Button(toolbar, text="Image de fond", command=self.choose_background).pack(side="left", padx=(18, 6))
+        ttk.Button(toolbar, text="−", width=3, command=lambda: self.change_zoom(0.8)).pack(side="left", padx=(18, 2))
+        self.zoom_label = ttk.Label(toolbar, text="100 %", width=7, anchor="center")
+        self.zoom_label.pack(side="left")
+        ttk.Button(toolbar, text="+", width=3, command=lambda: self.change_zoom(1.25)).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Ajuster à l’écran", command=self.fit_canvas).pack(side="left")
         self.status = ttk.Label(toolbar, text="Sélectionnez un élément")
         self.status.pack(side="right")
@@ -149,6 +153,9 @@ class LayoutEditor(tk.Tk):
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._release)
         self.canvas.bind("<Delete>", lambda _event: self.delete_selected())
+        self.canvas.bind("<Control-MouseWheel>", self._wheel_zoom)
+        self.canvas.bind("<Control-Button-4>", lambda _event: self.change_zoom(1.25))
+        self.canvas.bind("<Control-Button-5>", lambda _event: self.change_zoom(0.8))
 
         inspector = ttk.LabelFrame(self, text="Configuration", padding=8)
         inspector.grid(row=1, column=2, sticky="ns", padx=(6, 10), pady=(0, 10))
@@ -228,6 +235,14 @@ class LayoutEditor(tk.Tk):
         self.zoom = min(1.0, available_width / self.canvas_size[0], available_height / self.canvas_size[1])
         self._refresh()
 
+    def change_zoom(self, factor: float) -> None:
+        self.zoom = max(0.1, min(3.0, self.zoom * factor))
+        self._refresh()
+
+    def _wheel_zoom(self, event) -> str:
+        self.change_zoom(1.25 if event.delta > 0 else 0.8)
+        return "break"
+
     def add_element(self, type_name: str) -> None:
         tag = "component"
         if type_name in {"composite", "frame"}:
@@ -235,7 +250,10 @@ class LayoutEditor(tk.Tk):
         element = ET.Element(tag)
         if tag == "component":
             element.set("type", type_name)
-        element.update({"x": "80", "y": "80", "size": "32"})
+        self.update_idletasks()
+        visible_x = self.canvas.canvasx(max(0, self.canvas.winfo_width() // 2)) / self.zoom
+        visible_y = self.canvas.canvasy(max(0, self.canvas.winfo_height() // 2)) / self.zoom
+        element.update({"x": str(max(0, int(visible_x - 100))), "y": str(max(0, int(visible_y - 45))), "size": "32"})
         if type_name == "text":
             element.text = "Nouveau texte"
         if type_name == "metric":
@@ -253,6 +271,15 @@ class LayoutEditor(tk.Tk):
         self.selected = element
         self._refresh()
         self.status.configure(text=f"Élément ajouté : {type_name}")
+        self._show_selected()
+
+    def _show_selected(self) -> None:
+        if self.selected is None:
+            return
+        for item, element in self._canvas_items.items():
+            if element is self.selected:
+                self.canvas.see(item)
+                return
 
     def delete_selected(self) -> None:
         if self.selected is None:
@@ -270,6 +297,7 @@ class LayoutEditor(tk.Tk):
         scaled_width = int(self.canvas_size[0] * self.zoom)
         scaled_height = int(self.canvas_size[1] * self.zoom)
         self.canvas.configure(scrollregion=(0, 0, scaled_width, scaled_height))
+        self.zoom_label.configure(text=f"{round(self.zoom * 100)} %")
         if self._background_photo is not None:
             background = self._background_photo
             if self.zoom != 1.0:
