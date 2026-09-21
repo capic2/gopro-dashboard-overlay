@@ -5,6 +5,7 @@ import json
 import sys
 import xml.etree.ElementTree as ET
 from bisect import bisect_left
+import pathlib
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,7 +15,6 @@ except ImportError:  # pragma: no cover
     ZoneInfo = None
 
 
-VSPEED_WINDOW_SECONDS = 3.0
 VSPEED_MAX_ABS_MPS = 15.0
 
 
@@ -55,6 +55,14 @@ def default_first_gpx_at(sync_mode, video_duration, gpx_points):
 
     gpx_duration = points_duration_seconds(gpx_points)
     return max(0.0, video_duration - gpx_duration)
+
+
+def adjusted_first_gpx_at(sync_mode, video_duration, gpx_points, gpx_offset):
+    first_gpx_at = default_first_gpx_at(sync_mode, video_duration, gpx_points)
+    if first_gpx_at is None:
+        return None
+
+    return max(0.0, first_gpx_at + gpx_offset)
 
 
 def video_start_time(points):
@@ -161,7 +169,11 @@ def seconds_between(a, b):
 
 
 def calculate_vertical_speed(previous_gpx_point, gpx_point):
-    """Calcule le vario moyen entre deux relevés GPX suffisamment espacés."""
+    """Calcule le vario instantané entre deux relevés GPX consécutifs.
+
+    Il n'y a volontairement pas de lissage : le passage en montée ou en
+    descente est ainsi visible dès le relevé où le signe de l'altitude change.
+    """
     if previous_gpx_point is None:
         return None
     if previous_gpx_point['ele'] is None or gpx_point['ele'] is None:
@@ -176,31 +188,11 @@ def calculate_vertical_speed(previous_gpx_point, gpx_point):
 
 
 def calculate_vertical_speeds(points):
+    previous_point = None
     vspeeds = []
-    for current_index, point in enumerate(points):
-        current_time = point.get('time')
-        if current_time is None:
-            vspeeds.append(None)
-            continue
-
-        vspeed = None
-        for previous_index in range(current_index - 1, -1, -1):
-            previous_point = points[previous_index]
-            previous_time = previous_point.get('time')
-            if previous_time is None:
-                continue
-
-            elapsed_seconds = (current_time - previous_time).total_seconds()
-            if elapsed_seconds <= 0:
-                continue
-            if elapsed_seconds < VSPEED_WINDOW_SECONDS:
-                continue
-
-            vspeed = calculate_vertical_speed(previous_point, point)
-            if vspeed is not None:
-                break
-
-        vspeeds.append(vspeed)
+    for point in points:
+        vspeeds.append(calculate_vertical_speed(previous_point, point))
+        previous_point = point
     return vspeeds
 
 
@@ -1273,7 +1265,7 @@ def main():
         print(f"   🎬 Durée vidéo auto depuis OSV: {video_duration:.3f}s")
 
     if first_gpx_at is None:
-        first_gpx_at = default_first_gpx_at(args.sync, video_duration, gpx_points)
+        first_gpx_at = adjusted_first_gpx_at(args.sync, video_duration, gpx_points, args.gpx_offset)
         if first_gpx_at is not None:
             gpx_duration = points_duration_seconds(gpx_points)
             print(
