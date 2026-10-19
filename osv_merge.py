@@ -196,7 +196,13 @@ def calculate_vertical_speeds(points):
     return vspeeds
 
 
-def auto_align_osv_time(osv_points, gpx_points):
+def auto_align_osv_time(
+    osv_points,
+    gpx_points,
+    tolerance_seconds=1.0,
+    video_duration=None,
+    first_gpx_at=None,
+):
     """
     Choisit automatiquement l'interprétation timezone OSV qui maximise le chevauchement GPX.
 
@@ -208,6 +214,8 @@ def auto_align_osv_time(osv_points, gpx_points):
 
     original_osv_start = osv_points[0]['time']
     original_osv_end = osv_points[-1]['time']
+    original_video_start = video_start_time(osv_points)
+    osv_timestamps = [point['time'] for point in osv_points]
     gpx_timestamps = sorted(point['time'] for point in gpx_points)
     gpx_start = gpx_timestamps[0]
     gpx_end = gpx_timestamps[-1]
@@ -218,16 +226,44 @@ def auto_align_osv_time(osv_points, gpx_points):
         candidate_start = original_osv_start + shift
         candidate_end = original_osv_end + shift
         overlap = overlap_seconds(candidate_start, candidate_end, gpx_start, gpx_end)
-        gpx_point_count = bisect_right(gpx_timestamps, candidate_end) - bisect_left(
-            gpx_timestamps, candidate_start
+        matched_gpx_point_count = 0
+        # Score only GPX points the downstream merge can retain. For absolute
+        # sync, the video start moves with the candidate unless first_gpx_at
+        # explicitly fixes it from the GPX timeline.
+        candidate_video_start = (
+            gpx_start - timedelta(seconds=first_gpx_at)
+            if first_gpx_at is not None
+            else original_video_start + shift
         )
+        score_window_start = max(candidate_start, candidate_video_start)
+        score_window_end = candidate_end
+        if video_duration is not None:
+            score_window_end = min(
+                score_window_end,
+                candidate_video_start + timedelta(seconds=video_duration),
+            )
+        first_gpx_index = bisect_left(gpx_timestamps, score_window_start)
+        after_last_gpx_index = bisect_right(gpx_timestamps, score_window_end)
+        for gpx_time in gpx_timestamps[first_gpx_index:after_last_gpx_index]:
+            expected_osv_time = gpx_time - shift
+            osv_index = bisect_left(osv_timestamps, expected_osv_time)
+            nearest_osv_times = []
+            if osv_index < len(osv_timestamps):
+                nearest_osv_times.append(osv_timestamps[osv_index])
+            if osv_index > 0:
+                nearest_osv_times.append(osv_timestamps[osv_index - 1])
+            if any(
+                abs((osv_time - expected_osv_time).total_seconds()) <= tolerance_seconds
+                for osv_time in nearest_osv_times
+            ):
+                matched_gpx_point_count += 1
         candidates.append({
             'offset_minutes': offset_minutes,
             'shift': shift,
             'start': candidate_start,
             'end': candidate_end,
             'overlap': overlap,
-            'gpx_point_count': gpx_point_count,
+            'matched_gpx_point_count': matched_gpx_point_count,
         })
 
     # Range overlap alone can select a timezone that lands inside a long GPX
@@ -235,7 +271,7 @@ def auto_align_osv_time(osv_points, gpx_points):
     # timestamps, then use range overlap and the closest offset as tie-breakers.
     candidates.sort(
         key=lambda c: (
-            c['gpx_point_count'],
+            c['matched_gpx_point_count'],
             c['overlap'],
             -abs(c['offset_minutes']),
         ),
@@ -250,7 +286,7 @@ def auto_align_osv_time(osv_points, gpx_points):
             print(
                 f"      {format_utc_offset(candidate['offset_minutes'])}: "
                 f"overlap={candidate['overlap']:.1f}s, "
-                f"GPX points={candidate['gpx_point_count']}, "
+                f"matching GPX points={candidate['matched_gpx_point_count']}, "
                 f"OSV={candidate['start']} → {candidate['end']}"
             )
         return
@@ -264,7 +300,7 @@ def auto_align_osv_time(osv_points, gpx_points):
     print(
         f"   ✅ Auto timing OSV choisi: {format_utc_offset(best['offset_minutes'])} "
         f"(chevauchement {best['overlap']:.1f}s, "
-        f"{best['gpx_point_count']} points GPX dans la fenêtre)"
+        f"{best['matched_gpx_point_count']} points GPX appariables à ±{tolerance_seconds:g}s)"
     )
     print(f"   📍 OSV recalé: {osv_points[0]['time']} → {osv_points[-1]['time']}")
 
@@ -675,7 +711,13 @@ def merge_by_timestamp(
             relative_time = osv_point['timestamp_offset'] - osv_first_sample_time
             osv_point['time'] = gpx_start + timedelta(seconds=relative_time)
     elif sync_mode == 'absolute' and auto_osv_time:
-        auto_align_osv_time(osv_points, gpx_points)
+        auto_align_osv_time(
+            osv_points,
+            gpx_points,
+            tolerance_seconds,
+            video_duration=video_duration,
+            first_gpx_at=first_gpx_at,
+        )
     elif sync_mode != 'absolute':
         print(f"   ❌ Mode synchro inconnu: {sync_mode}")
         return []

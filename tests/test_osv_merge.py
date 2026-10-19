@@ -117,7 +117,7 @@ def test_auto_align_prefers_gpx_samples_over_a_range_only_overlap_tie(capsys):
         gpx_point(13 * 3600 + 28 * 60 + 35, 104),
     ]
     osv_start = base_time + timedelta(hours=13, minutes=47, seconds=50)
-    osv_points = [osv_point(osv_start, 0), osv_point(osv_start, 829)]
+    osv_points = [osv_point(osv_start, second) for second in range(830)]
 
     osv_merge.auto_align_osv_time(osv_points, gpx_points)
 
@@ -125,6 +125,51 @@ def test_auto_align_prefers_gpx_samples_over_a_range_only_overlap_tie(capsys):
     # UTC+01:00 puts OSV samples in the first GPX segment before its long gap.
     assert osv_points[0]['time'] == base_time + timedelta(hours=12, minutes=47, seconds=50)
     assert 'UTC+01:00' in capsys.readouterr().out
+
+
+def test_auto_align_does_not_score_gpx_points_outside_candidate_range():
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_start = base_time + timedelta(hours=15)
+    gpx_points = [
+        gpx_point(14 * 3600 + 45 * 60, 100),
+        gpx_point(14 * 3600 + 50 * 60, 101),
+        gpx_point(14 * 3600 + 59 * 60 + 59.5, 102),
+        gpx_point(15 * 3600 + 10 * 60, 103),
+    ]
+    osv_points = [
+        osv_point(osv_start, second)
+        for second in range(10 * 60 + 1)
+    ]
+
+    osv_merge.auto_align_osv_time(osv_points, gpx_points)
+
+    # UTC would incorrectly tie UTC+00:15 if the 14:59:59.5 point were
+    # counted via tolerance despite falling outside the UTC candidate range.
+    assert osv_points[0]['time'] == base_time + timedelta(hours=14, minutes=45)
+
+
+def test_auto_align_scores_only_gpx_points_inside_forced_video_window():
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    gpx_points = [
+        gpx_point(0, 100),
+        gpx_point(5, 101),
+        gpx_point(10, 102),
+        gpx_point(900, 103),
+        gpx_point(1500, 104),
+    ]
+    osv_points = [
+        osv_point(video_start, 0),
+        osv_point(video_start, 600),
+    ]
+
+    osv_merge.auto_align_osv_time(
+        osv_points,
+        gpx_points,
+        video_duration=10,
+        first_gpx_at=0,
+    )
+
+    assert osv_points[0]['time'] == video_start
 
 
 def test_merge_uses_nearest_sample_across_multiple_osv_segments():
