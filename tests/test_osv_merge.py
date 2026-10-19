@@ -189,9 +189,18 @@ def test_empty_merge_reports_time_ranges_without_dividing_by_zero(monkeypatch, c
     assert merged == []
     assert 'ZeroDivisionError' not in output
     assert 'Aucun point conservé' in output
-    assert 'GPX=2026-01-01 00:00:30+00:00 → 2026-01-01 00:00:40+00:00' in output
-    assert 'OSV=2026-01-01 00:00:00+00:00 → 2026-01-01 00:00:10+00:00' in output
-    assert 'fenêtre vidéo=2026-01-01 00:00:00+00:00 → 2026-01-01 00:00:10+00:00' in output
+    assert (
+        'GPX=2026-01-01 00:00:30+00:00 → 2026-01-01 00:00:40+00:00'
+        in output
+    )
+    assert (
+        'OSV=2026-01-01 00:00:00+00:00 → 2026-01-01 00:00:10+00:00'
+        in output
+    )
+    assert (
+        'fenêtre vidéo=2026-01-01 00:00:00+00:00 → '
+        '2026-01-01 00:00:10+00:00' in output
+    )
     assert 'points GPX dans la fenêtre=0/2' in output
 
 

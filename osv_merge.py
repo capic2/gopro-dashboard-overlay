@@ -851,7 +851,8 @@ def merge_by_timestamp(
 
     if not merged:
         print(
-            "   ❌ Aucun point conservé; vérifie le chevauchement temporel et les données OSV: "
+            "   ❌ Aucun point conservé; vérifie le chevauchement temporel "
+            "et les données OSV: "
             f"GPX={gpx_points[0]['time']} → {gpx_points[-1]['time']}; "
             f"OSV={osv_start} → {osv_end}; "
             f"fenêtre vidéo={forced_start} → {forced_end}; "
