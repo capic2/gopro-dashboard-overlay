@@ -4,7 +4,7 @@ import subprocess
 import json
 import sys
 import xml.etree.ElementTree as ET
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 import pathlib
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -208,8 +208,9 @@ def auto_align_osv_time(osv_points, gpx_points):
 
     original_osv_start = osv_points[0]['time']
     original_osv_end = osv_points[-1]['time']
-    gpx_start = gpx_points[0]['time']
-    gpx_end = gpx_points[-1]['time']
+    gpx_timestamps = sorted(point['time'] for point in gpx_points)
+    gpx_start = gpx_timestamps[0]
+    gpx_end = gpx_timestamps[-1]
 
     candidates = []
     for offset_minutes in range(-12 * 60, 14 * 60 + 1, 15):
@@ -217,15 +218,29 @@ def auto_align_osv_time(osv_points, gpx_points):
         candidate_start = original_osv_start + shift
         candidate_end = original_osv_end + shift
         overlap = overlap_seconds(candidate_start, candidate_end, gpx_start, gpx_end)
+        gpx_point_count = bisect_right(gpx_timestamps, candidate_end) - bisect_left(
+            gpx_timestamps, candidate_start
+        )
         candidates.append({
             'offset_minutes': offset_minutes,
             'shift': shift,
             'start': candidate_start,
             'end': candidate_end,
             'overlap': overlap,
+            'gpx_point_count': gpx_point_count,
         })
 
-    candidates.sort(key=lambda c: (c['overlap'], -abs(c['offset_minutes'])), reverse=True)
+    # Range overlap alone can select a timezone that lands inside a long GPX
+    # recording gap. Prefer the candidate that actually contains the most GPX
+    # timestamps, then use range overlap and the closest offset as tie-breakers.
+    candidates.sort(
+        key=lambda c: (
+            c['gpx_point_count'],
+            c['overlap'],
+            -abs(c['offset_minutes']),
+        ),
+        reverse=True,
+    )
     best = candidates[0]
 
     print("   🔎 Auto timing OSV: recherche du meilleur chevauchement GPX")
@@ -235,6 +250,7 @@ def auto_align_osv_time(osv_points, gpx_points):
             print(
                 f"      {format_utc_offset(candidate['offset_minutes'])}: "
                 f"overlap={candidate['overlap']:.1f}s, "
+                f"GPX points={candidate['gpx_point_count']}, "
                 f"OSV={candidate['start']} → {candidate['end']}"
             )
         return
@@ -247,7 +263,8 @@ def auto_align_osv_time(osv_points, gpx_points):
 
     print(
         f"   ✅ Auto timing OSV choisi: {format_utc_offset(best['offset_minutes'])} "
-        f"(chevauchement {best['overlap']:.1f}s)"
+        f"(chevauchement {best['overlap']:.1f}s, "
+        f"{best['gpx_point_count']} points GPX dans la fenêtre)"
     )
     print(f"   📍 OSV recalé: {osv_points[0]['time']} → {osv_points[-1]['time']}")
 

@@ -107,6 +107,26 @@ def test_absolute_sync_does_not_invent_first_gpx_offset():
     assert default_first_gpx_at('absolute', 548.8, points) is None
 
 
+def test_auto_align_prefers_gpx_samples_over_a_range_only_overlap_tie(capsys):
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    gpx_points = [
+        gpx_point(12 * 3600 + 47 * 60 + 3, 100),
+        gpx_point(12 * 3600 + 48 * 60, 101),
+        gpx_point(13 * 3600 + 46, 102),
+        gpx_point(13 * 3600 + 28 * 60 + 32, 103),
+        gpx_point(13 * 3600 + 28 * 60 + 35, 104),
+    ]
+    osv_start = base_time + timedelta(hours=13, minutes=47, seconds=50)
+    osv_points = [osv_point(osv_start, 0), osv_point(osv_start, 829)]
+
+    osv_merge.auto_align_osv_time(osv_points, gpx_points)
+
+    # UTC+00:45 and UTC+01:00 both have the same full range overlap, but only
+    # UTC+01:00 puts OSV samples in the first GPX segment before its long gap.
+    assert osv_points[0]['time'] == base_time + timedelta(hours=12, minutes=47, seconds=50)
+    assert 'UTC+01:00' in capsys.readouterr().out
+
+
 def test_merge_uses_nearest_sample_across_multiple_osv_segments():
     video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     first_segment = [osv_point(video_start, second) for second in range(0, 3)]
