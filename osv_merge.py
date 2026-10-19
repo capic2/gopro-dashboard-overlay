@@ -849,6 +849,16 @@ def merge_by_timestamp(
     if fill_osv_gap or include_osv_only:
         merged.sort(key=lambda point: point['time'])
 
+    if not merged:
+        print(
+            "   ❌ Aucun point conservé; vérifie le chevauchement temporel et les données OSV: "
+            f"GPX={gpx_points[0]['time']} → {gpx_points[-1]['time']}; "
+            f"OSV={osv_start} → {osv_end}; "
+            f"fenêtre vidéo={forced_start} → {forced_end}; "
+            f"points GPX dans la fenêtre={len(filtered_gpx_points)}/{len(gpx_points)}"
+        )
+        return merged
+
     with_gforce = sum(1 for p in merged if p.get('g_force') is not None)
     with_vspeed = sum(1 for p in merged if p.get('vspeed') is not None)
     vspeeds = [p['vspeed'] for p in merged if p.get('vspeed') is not None]
@@ -1290,7 +1300,6 @@ def main():
     )
 
     if not merged_points:
-        print("❌ Aucun point fusionné - vérifie les plages temporelles ou utilise --sync gpx-start si tu veux l'ancien comportement")
         sys.exit(1)
 
     # 4. Générer GPX

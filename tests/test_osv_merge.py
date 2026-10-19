@@ -1,6 +1,7 @@
 ﻿from datetime import datetime, timedelta, timezone
 
 import pytest
+import osv_merge
 
 from osv_merge import apply_gpx_offset
 from osv_merge import adjusted_first_gpx_at
@@ -168,6 +169,30 @@ def test_absolute_sync_trims_gpx_before_video_start():
         video_start,
         video_start + timedelta(seconds=10),
     ]
+
+
+def test_empty_merge_reports_time_ranges_without_dividing_by_zero(monkeypatch, capsys):
+    video_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    osv_points = [osv_point(video_start, 0), osv_point(video_start, 10)]
+    gpx_points = [gpx_point(30, 100), gpx_point(40, 110)]
+    monkeypatch.setattr(osv_merge, 'select_osv_only_points', lambda *_args: [])
+
+    merged = merge_by_timestamp(
+        osv_points,
+        gpx_points,
+        sync_mode='absolute',
+        fill_osv_gap=True,
+        video_duration=10,
+    )
+
+    output = capsys.readouterr().out
+    assert merged == []
+    assert 'ZeroDivisionError' not in output
+    assert 'Aucun point conservé' in output
+    assert 'GPX=2026-01-01 00:00:30+00:00 → 2026-01-01 00:00:40+00:00' in output
+    assert 'OSV=2026-01-01 00:00:00+00:00 → 2026-01-01 00:00:10+00:00' in output
+    assert 'fenêtre vidéo=2026-01-01 00:00:00+00:00 → 2026-01-01 00:00:10+00:00' in output
+    assert 'points GPX dans la fenêtre=0/2' in output
 
 
 def test_absolute_sync_fills_when_gpx_starts_after_video_start():
