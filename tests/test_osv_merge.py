@@ -1,4 +1,7 @@
-﻿from datetime import datetime, timedelta, timezone
+import json
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 import osv_merge
@@ -45,6 +48,173 @@ def test_preferred_osv_source_falls_back_to_osv_without_lrf(tmp_path):
     osv_file.write_bytes(b'osv')
 
     assert preferred_osv_source(osv_file) == osv_file
+
+
+def test_extract_osv_data_falls_back_to_full_osv_for_missing_lrf_acceleration(
+    tmp_path, monkeypatch, capsys
+):
+    osv_file = tmp_path / 'segment.OSV'
+    lrf_file = tmp_path / 'segment.LRF'
+    osv_file.write_bytes(b'large-osv')
+    lrf_file.write_bytes(b'lrf')
+
+    def run_exiftool(args, **_kwargs):
+        filename = str(args[-1])
+        samples = [{
+            'Main:CreateDate': '2026:01:01 00:00:00',
+            'Doc1:SampleTime': '0 s',
+        }]
+        if filename == str(osv_file):
+            samples[0].update({
+                'Doc1:AccelerometerX': 0.1,
+                'Doc1:AccelerometerY': 0.2,
+                'Doc1:AccelerometerZ': 0.9,
+            })
+        else:
+            samples[0].update({
+                'Doc1:GyroscopeX': 0.01,
+                'Doc1:GyroscopeY': 0.02,
+                'Doc1:GyroscopeZ': 0.03,
+            })
+        return SimpleNamespace(returncode=0, stdout=json.dumps(samples), stderr='')
+
+    calls = []
+
+    def recording_run_exiftool(args, **kwargs):
+        calls.append(str(args[-1]))
+        return run_exiftool(args, **kwargs)
+
+    monkeypatch.setattr(osv_merge.subprocess, 'run', recording_run_exiftool)
+
+    points = osv_merge.extract_osv_data(osv_file)
+
+    assert calls == [str(lrf_file), str(osv_file)]
+    assert points[0]['accel_x'] == pytest.approx(0.1)
+    assert points[0]['accel_y'] == pytest.approx(0.2)
+    assert points[0]['accel_z'] == pytest.approx(0.9)
+    assert points[0]['g_force'] == pytest.approx((0.1**2 + 0.2**2 + 0.9**2) ** 0.5)
+    lrf_point = next(point for point in points if point['source'] == 'lrf-gyro')
+    assert lrf_point['gyro_x'] == pytest.approx(0.01)
+    assert 'OSV complet retenu' in capsys.readouterr().out
+
+    merged_points = osv_merge.merge_by_timestamp(
+        points,
+        [gpx_point(0, 100)],
+        sync_mode='absolute',
+        fill_osv_gap=False,
+    )
+    assert merged_points[0]['accel_x'] == pytest.approx(0.1)
+
+    output_file = tmp_path / 'enhanced.gpx'
+    osv_merge.generate_gpx(
+        merged_points,
+        output_file,
+    )
+    xml = ET.parse(output_file)
+    acceleration = xml.find('.//{http://www.garmin.com/xmlschemas/GpxExtensions/v3}Acceleration')
+    gyroscope = xml.find('.//{http://www.garmin.com/xmlschemas/GpxExtensions/v3}Gyroscope')
+    assert acceleration is not None
+    assert gyroscope is not None
+    assert acceleration.findtext('{http://www.garmin.com/xmlschemas/GpxExtensions/v3}x') == '0.100000'
+    assert acceleration.findtext('{http://www.garmin.com/xmlschemas/GpxExtensions/v3}y') == '0.200000'
+    assert acceleration.findtext('{http://www.garmin.com/xmlschemas/GpxExtensions/v3}z') == '0.900000'
+    assert gyroscope.findtext('{http://www.garmin.com/xmlschemas/GpxExtensions/v3}x') == '0.010000'
+
+
+def test_extract_osv_data_keeps_lrf_points_when_full_osv_probe_times_out(
+    tmp_path, monkeypatch, capsys
+):
+    osv_file = tmp_path / 'segment.OSV'
+    lrf_file = tmp_path / 'segment.LRF'
+    osv_file.write_bytes(b'large-osv')
+    lrf_file.write_bytes(b'lrf')
+    calls = []
+
+    def run_exiftool(args, **_kwargs):
+        filename = str(args[-1])
+        calls.append(filename)
+        if filename == str(osv_file):
+            raise osv_merge.subprocess.TimeoutExpired(args, timeout=1)
+        sample = {
+            'Main:CreateDate': '2026:01:01 00:00:00',
+            'Doc1:SampleTime': '0 s',
+            'Doc1:GyroscopeX': 0.01,
+            'Doc1:GyroscopeY': 0.02,
+            'Doc1:GyroscopeZ': 0.03,
+        }
+        return SimpleNamespace(returncode=0, stdout=json.dumps([sample]), stderr='')
+
+    monkeypatch.setattr(osv_merge.subprocess, 'run', run_exiftool)
+
+    points = osv_merge.extract_osv_data(osv_file)
+
+    assert calls == [str(lrf_file), str(osv_file)]
+    assert len(points) == 1
+    assert points[0]['gyro_x'] == pytest.approx(0.01)
+    assert points[0]['g_force'] is None
+    assert 'conservation des points LRF' in capsys.readouterr().out
+
+
+def test_extract_osv_data_uses_full_osv_points_when_lrf_has_no_timed_samples(
+    tmp_path, monkeypatch, capsys
+):
+    osv_file = tmp_path / 'segment.OSV'
+    lrf_file = tmp_path / 'segment.LRF'
+    osv_file.write_bytes(b'large-osv')
+    lrf_file.write_bytes(b'lrf')
+
+    def run_exiftool(args, **_kwargs):
+        filename = str(args[-1])
+        sample = {'Main:CreateDate': '2026:01:01 00:00:00'}
+        if filename == str(osv_file):
+            sample.update({
+                'Doc1:SampleTime': '0 s',
+                'Doc1:GyroscopeX': 0.01,
+                'Doc1:GyroscopeY': 0.02,
+                'Doc1:GyroscopeZ': 0.03,
+            })
+        return SimpleNamespace(returncode=0, stdout=json.dumps([sample]), stderr='')
+
+    monkeypatch.setattr(osv_merge.subprocess, 'run', run_exiftool)
+
+    points = osv_merge.extract_osv_data(osv_file)
+
+    assert len(points) == 1
+    assert points[0]['gyro_x'] == pytest.approx(0.01)
+    assert points[0]['g_force'] is None
+    assert 'OSV complet retenu: 1 points' in capsys.readouterr().out
+
+
+def test_extract_osv_files_does_not_retry_timed_out_osv_during_lrf_recovery(
+    tmp_path, monkeypatch
+):
+    osv_file = tmp_path / 'segment.OSV'
+    lrf_file = tmp_path / 'segment.LRF'
+    osv_file.write_bytes(b'large-osv')
+    lrf_file.write_bytes(b'lrf')
+    calls = []
+
+    def run_exiftool(args, **_kwargs):
+        filename = str(args[-1])
+        calls.append(filename)
+        if filename == str(osv_file):
+            raise osv_merge.subprocess.TimeoutExpired(args, timeout=1)
+        sample = {
+            'Main:CreateDate': '2026:01:01 00:00:00',
+            'Doc1:SampleTime': '0 s',
+            'Doc1:GyroscopeX': 0.01,
+            'Doc1:GyroscopeY': 0.02,
+            'Doc1:GyroscopeZ': 0.03,
+        }
+        return SimpleNamespace(returncode=0, stdout=json.dumps([sample]), stderr='')
+
+    monkeypatch.setattr(osv_merge.subprocess, 'run', run_exiftool)
+
+    points = osv_merge.extract_osv_files([str(osv_file)])
+
+    assert calls == [str(lrf_file), str(osv_file)]
+    assert len(points) == 1
+    assert points[0]['gyro_x'] == pytest.approx(0.01)
 
 
 def test_vertical_speed_smooths_short_intervals():
