@@ -19,7 +19,9 @@ VSPEED_MAX_ABS_MPS = 15.0
 
 
 class ExiftoolTimeoutError(RuntimeError):
-    pass
+    def __init__(self, source):
+        self.source = Path(source)
+        super().__init__(str(self.source))
 
 
 def preferred_osv_source(osv_file):
@@ -63,6 +65,26 @@ def adjusted_first_gpx_at(sync_mode, video_duration, gpx_points, gpx_offset):
         return None
 
     return max(0.0, first_gpx_at + gpx_offset)
+
+
+def merge_companion_gyroscope(primary_points, companion_points):
+    """Keep every timed LRF gyroscope sample alongside the full OSV points."""
+    merged_points = [dict(point) for point in primary_points]
+    merged_points.sort(key=lambda point: point['time'])
+    companion_gyro_points = [
+        point for point in companion_points
+        if any(point.get(f'gyro_{axis}') is not None for axis in 'xyz')
+    ]
+
+    if not companion_gyro_points:
+        return merged_points
+
+    for companion_point in companion_gyro_points:
+        lrf_point = dict(companion_point)
+        lrf_point['source'] = 'lrf-gyro'
+        merged_points.append(lrf_point)
+
+    return sorted(merged_points, key=lambda point: point['time'])
 
 
 def video_start_time(points):
@@ -316,8 +338,10 @@ def extract_osv_data(
     Extrait les données d'un OSV avec Sample Time en secondes
     """
     print(f"🔍 Extraction de {osv_file}...")
+    full_osv_file = Path(osv_file)
     if use_companion_lrf:
         osv_file = preferred_osv_source(osv_file)
+    selected_osv_file = Path(osv_file)
 
     try:
         create_date_tz, create_date_tz_label = resolve_osv_timezone(osv_timezone, osv_utc_offset)
@@ -345,6 +369,15 @@ def extract_osv_data(
 
     if result.returncode != 0:
         print(f"❌ Erreur exiftool: {result.stderr}")
+        if use_companion_lrf and selected_osv_file != full_osv_file:
+            print("   ⚠️  Échec de lecture du LRF; nouvelle tentative avec l'OSV complet")
+            return extract_osv_data(
+                full_osv_file,
+                osv_timezone=osv_timezone,
+                osv_utc_offset=osv_utc_offset,
+                exiftool_timeout=exiftool_timeout,
+                use_companion_lrf=False,
+            )
         return []
 
     data = json.loads(result.stdout)
@@ -457,6 +490,37 @@ def extract_osv_data(
 
     print(f"   ✅ {len(points)} points OSV extraits")
 
+    # The smaller LRF is faster to parse, but can omit sensor tracks that are
+    # present in the full OSV. Retry the full source when it has no complete
+    # accelerometer samples so the enriched GPX can still carry the G data.
+    if use_companion_lrf and selected_osv_file != full_osv_file:
+        lrf_g_force_count = sum(point.get('g_force') is not None for point in points)
+        if lrf_g_force_count == 0:
+            print("   ⚠️  Aucun relevé d'accélération dans le LRF; vérification de l'OSV complet")
+            try:
+                full_osv_points = extract_osv_data(
+                    full_osv_file,
+                    osv_timezone=osv_timezone,
+                    osv_utc_offset=osv_utc_offset,
+                    exiftool_timeout=exiftool_timeout,
+                    use_companion_lrf=False,
+                )
+            except ExiftoolTimeoutError:
+                print("   ⚠️  Vérification de l'OSV complet expirée; conservation des points LRF")
+            else:
+                full_osv_g_force_count = sum(
+                    point.get('g_force') is not None for point in full_osv_points
+                )
+                if full_osv_points and (
+                    not points or full_osv_g_force_count > lrf_g_force_count
+                ):
+                    full_osv_points = merge_companion_gyroscope(full_osv_points, points)
+                    print(
+                        f"   ✅ OSV complet retenu: {len(full_osv_points)} points, "
+                        f"dont {full_osv_g_force_count} relevés d'accélération"
+                    )
+                    return full_osv_points
+
     if points:
         print(f"   📅 Date début: {points[0]['time']}")
         print(f"   📅 Date fin: {points[-1]['time']}")
@@ -493,18 +557,22 @@ def extract_osv_files(
                 osv_timezone=osv_timezone,
                 osv_utc_offset=osv_utc_offset,
                 exiftool_timeout=exiftool_timeout,
-                use_companion_lrf=False,
+                use_companion_lrf=True,
             )
-        except ExiftoolTimeoutError:
+        except ExiftoolTimeoutError as exc:
             preferred_source = preferred_osv_source(osv_file)
-            if preferred_source == osv_file:
+            if (
+                Path(preferred_source) == Path(osv_file)
+                or exc.source != Path(preferred_source)
+            ):
                 raise
-            print(f"⚠️  LRF indisponible, nouvelle tentative avec OSV: {osv_file}")
+            print(f"⚠️  LRF expiré, nouvelle tentative avec OSV: {osv_file}")
             points = extract_osv_data(
                 osv_file,
                 osv_timezone=osv_timezone,
                 osv_utc_offset=osv_utc_offset,
                 exiftool_timeout=exiftool_timeout,
+                use_companion_lrf=False,
             )
         all_points.extend(points)
         if progress:
@@ -768,10 +836,19 @@ def merge_by_timestamp(
 
     merged = []
     vspeeds = calculate_vertical_speeds(filtered_gpx_points)
-    # OSV segments are sorted chronologically by extract_osv_files(). Keep a
-    # parallel timestamp list so matching does not scan every sensor sample
-    # for every GPX point (which is prohibitive for long, split recordings).
-    osv_timestamps = [point['time'] for point in osv_points]
+    gpx_timestamps = [point['time'] for point in gpx_points]
+    # OSV segments are sorted chronologically by extract_osv_files(). Keep
+    # timestamp indexes for independent accelerometer and gyroscope matching.
+    acceleration_points = [
+        point for point in osv_points
+        if all(point.get(f'accel_{axis}') is not None for axis in 'xyz')
+    ]
+    acceleration_timestamps = [point['time'] for point in acceleration_points]
+    gyroscope_points = [
+        point for point in osv_points
+        if all(point.get(f'gyro_{axis}') is not None for axis in 'xyz')
+    ]
+    gyroscope_timestamps = [point['time'] for point in gyroscope_points]
 
     if fill_osv_gap or include_osv_only:
         if osv_only_position == 'nearest':
@@ -816,6 +893,7 @@ def merge_by_timestamp(
         progress(50)
     total_filtered_points = len(filtered_gpx_points)
     last_progress = 50
+    retained_lrf_gyro_samples = set()
     for index, (gpx_point, vspeed) in enumerate(zip(filtered_gpx_points, vspeeds), start=1):
         gpx_time = gpx_point['time']
 
@@ -829,36 +907,45 @@ def merge_by_timestamp(
 
         merged_point['vspeed'] = vspeed
 
-        # Chercher le point OSV le plus proche en O(log n), y compris lorsque
-        # plusieurs fichiers OSV ont été concaténés.
-        insertion_index = bisect_left(osv_timestamps, gpx_time)
-        candidates = []
-        if insertion_index < len(osv_points):
-            candidates.append(osv_points[insertion_index])
-        if insertion_index > 0:
-            candidates.append(osv_points[insertion_index - 1])
-        best_osv = min(
-            candidates,
-            key=lambda point: abs((point['time'] - gpx_time).total_seconds()),
-            default=None,
-        )
-        best_diff = (
-            abs((best_osv['time'] - gpx_time).total_seconds())
-            if best_osv is not None
-            else float('inf')
-        )
-
-        # Enrichir avec OSV si disponible
-        if best_osv and best_diff <= tolerance_seconds:
-            merged_point.update({
-                'g_force': best_osv.get('g_force'),
-                'accel_x': best_osv.get('accel_x'),
-                'accel_y': best_osv.get('accel_y'),
-                'accel_z': best_osv.get('accel_z'),
-                'gyro_x': best_osv.get('gyro_x'),
-                'gyro_y': best_osv.get('gyro_y'),
-                'gyro_z': best_osv.get('gyro_z'),
-            })
+        for sensor_points, sensor_timestamps, fields in (
+            (
+                acceleration_points,
+                acceleration_timestamps,
+                ('g_force', 'accel_x', 'accel_y', 'accel_z'),
+            ),
+            (
+                gyroscope_points,
+                gyroscope_timestamps,
+                ('gyro_x', 'gyro_y', 'gyro_z'),
+            ),
+        ):
+            insertion_index = bisect_left(sensor_timestamps, gpx_time)
+            candidates = []
+            if insertion_index < len(sensor_points):
+                candidates.append(sensor_points[insertion_index])
+            if insertion_index > 0:
+                candidates.append(sensor_points[insertion_index - 1])
+            best_sensor_point = min(
+                candidates,
+                key=lambda point: abs((point['time'] - gpx_time).total_seconds()),
+                default=None,
+            )
+            if best_sensor_point and abs(
+                (best_sensor_point['time'] - gpx_time).total_seconds()
+            ) <= tolerance_seconds:
+                if (
+                    sensor_points is gyroscope_points
+                    and best_sensor_point.get('source') == 'lrf-gyro'
+                    and best_sensor_point['time'] == gpx_time
+                ):
+                    retained_lrf_gyro_samples.add((
+                        best_sensor_point['time'],
+                        best_sensor_point.get('gyro_x'),
+                        best_sensor_point.get('gyro_y'),
+                        best_sensor_point.get('gyro_z'),
+                    ))
+                for field in fields:
+                    merged_point[field] = best_sensor_point.get(field)
 
         merged.append(merged_point)
         if progress and total_filtered_points:
@@ -866,6 +953,53 @@ def merge_by_timestamp(
             if current_progress > last_progress:
                 progress(current_progress)
                 last_progress = current_progress
+
+    # The GPX-driven merge above samples only one OSV point per GPS fix. Add
+    # unmatched LRF gyroscope samples as track points so none are discarded.
+    for osv_point in osv_points:
+        if osv_point.get('source') != 'lrf-gyro':
+            continue
+        gyro_sample = (
+            osv_point['time'],
+            osv_point.get('gyro_x'),
+            osv_point.get('gyro_y'),
+            osv_point.get('gyro_z'),
+        )
+        if gyro_sample in retained_lrf_gyro_samples:
+            continue
+        point_start = max(
+            gpx_points[0]['time'],
+            forced_start if forced_start is not None else osv_start,
+        )
+        point_end = min(
+            gpx_points[-1]['time'],
+            forced_end if forced_end is not None else osv_end,
+        )
+        if not (point_start <= osv_point['time'] <= point_end):
+            continue
+
+        insertion_index = bisect_left(gpx_timestamps, osv_point['time'])
+        candidates = []
+        if insertion_index < len(gpx_points):
+            candidates.append(gpx_points[insertion_index])
+        if insertion_index > 0:
+            candidates.append(gpx_points[insertion_index - 1])
+        nearest_gpx = min(
+            candidates,
+            key=lambda point: abs((point['time'] - osv_point['time']).total_seconds()),
+            default=None,
+        )
+        if nearest_gpx is None:
+            continue
+        lrf_point = dict(osv_point)
+        lrf_point.update({
+            'lat': nearest_gpx['lat'],
+            'lon': nearest_gpx['lon'],
+            'ele': nearest_gpx['ele'],
+            'original_extensions': None,
+            'vspeed': None,
+        })
+        merged.append(lrf_point)
 
     if include_osv_only or (forced_end is not None and fill_osv_gap):
         after_start = max(osv_start, gpx_points[-1]['time'] + timedelta(microseconds=1))
@@ -905,8 +1039,7 @@ def merge_by_timestamp(
                 source='static-end',
             ))
 
-    if fill_osv_gap or include_osv_only:
-        merged.sort(key=lambda point: point['time'])
+    merged.sort(key=lambda point: point['time'])
 
     if not merged:
         print(
@@ -999,7 +1132,7 @@ def generate_gpx(points, output_file, progress=None):
         gpx += '          </ns1:TrackPointExtension>\n'
 
         # Acceleration dans gpxpx namespace
-        if point.get('accel_x') is not None:
+        if all(point.get(f'accel_{axis}') is not None for axis in 'xyz'):
             gpx += '          <gpxpx:Acceleration>\n'
             gpx += f'            <gpxpx:x>{point["accel_x"]:.6f}</gpxpx:x>\n'
             gpx += f'            <gpxpx:y>{point["accel_y"]:.6f}</gpxpx:y>\n'
@@ -1007,7 +1140,7 @@ def generate_gpx(points, output_file, progress=None):
             gpx += '          </gpxpx:Acceleration>\n'
 
         # Gyroscope dans gpxpx namespace
-        if point.get('gyro_x') is not None:
+        if all(point.get(f'gyro_{axis}') is not None for axis in 'xyz'):
             gpx += '          <gpxpx:Gyroscope>\n'
             gpx += f'            <gpxpx:x>{point["gyro_x"]:.6f}</gpxpx:x>\n'
             gpx += f'            <gpxpx:y>{point["gyro_y"]:.6f}</gpxpx:y>\n'
